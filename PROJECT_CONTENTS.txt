@@ -1,0 +1,4 @@
+SmartGrid Eclipse project files generated for EC5205.
+Main class: smartgrid.TrafficCenter
+Client class: smartgrid.JunctionClient
+Packet test: smartgrid.PacketTest

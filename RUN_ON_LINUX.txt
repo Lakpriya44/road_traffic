@@ -1,0 +1,24 @@
+Optional Linux terminal run (Eclipse is the required development IDE)
+
+From the SmartGrid_Eclipse folder:
+
+    mkdir -p bin
+    javac -encoding UTF-8 -d bin src/smartgrid/*.java
+
+Terminal 1 - server:
+
+    java -cp bin smartgrid.TrafficCenter
+
+Terminal 2 - junction 1 (same laptop):
+
+    java -cp bin smartgrid.JunctionClient J01 127.0.0.1
+
+Terminal 3 - junction 2:
+
+    java -cp bin smartgrid.JunctionClient J02 SERVER_LAN_IP
+
+Terminal 4 - junction 3:
+
+    java -cp bin smartgrid.JunctionClient J03 SERVER_LAN_IP
+
+Replace SERVER_LAN_IP with the server laptop's IPv4 address.
