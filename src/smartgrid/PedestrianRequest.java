@@ -9,15 +9,18 @@ public class PedestrianRequest {
 
     public PedestrianRequest(String junctionId, String crossingDirection,
             int waitingPedestrians, long timestamp) {
-        if (junctionId == null || !junctionId.matches("J0[1-3]")) {
+        if (!SmartGridConfig.isValidJunctionId(junctionId)) {
             throw new IllegalArgumentException("Junction ID must be J01, J02 or J03");
         }
         String direction = crossingDirection == null ? "" : crossingDirection.trim().toUpperCase();
         if (!isDirection(direction)) {
             throw new IllegalArgumentException("Invalid crossing direction");
         }
-        if (waitingPedestrians < 1) {
-            throw new IllegalArgumentException("At least one pedestrian is required");
+        if (waitingPedestrians < 1 || waitingPedestrians > 10000) {
+            throw new IllegalArgumentException("Pedestrian count must be between 1 and 10000");
+        }
+        if (timestamp <= 0) {
+            throw new IllegalArgumentException("Timestamp must be positive");
         }
         this.junctionId = junctionId;
         this.crossingDirection = direction;

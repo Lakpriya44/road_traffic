@@ -1,11 +1,15 @@
 package smartgrid;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
+import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /** Junction client. Run one process for each junction ID. */
 public class JunctionClient {
@@ -22,38 +26,71 @@ public class JunctionClient {
             return;
         }
 
-        junctionId = args[0].toUpperCase();
-        String serverHost = args.length >= 2 ? args[1] : "127.0.0.1";
-
-        if (!junctionId.matches("J0[1-3]")) {
+        junctionId = args[0].trim().toUpperCase();
+        String serverHost = args.length >= 2 ? args[1].trim() : "127.0.0.1";
+        if (!SmartGridConfig.isValidJunctionId(junctionId)) {
             System.out.println("Junction ID must be J01, J02 or J03.");
             return;
         }
 
+        running = true;
+        automaticMode = true;
+        Socket socket = new Socket();
+        Thread receiver = null;
+        Thread sender = null;
+        Thread signalWorker = null;
+        UDPClient localUdpClient = null;
+
         try {
-            final Socket socket = new Socket(serverHost, TrafficCenter.TCP_PORT);
+            socket.connect(new InetSocketAddress(serverHost, TrafficCenter.TCP_PORT),
+                    SmartGridConfig.TCP_CONNECT_TIMEOUT_MS);
+            socket.setSoTimeout(SmartGridConfig.TCP_HANDSHAKE_TIMEOUT_MS);
             tcpOut = new PrintWriter(socket.getOutputStream(), true);
-            final BufferedReader tcpIn = new BufferedReader(
-                    new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
-            udpClient = new UDPClient(serverHost, TrafficCenter.UDP_PORT);
+            final BufferedReader tcpIn = new BufferedReader(new InputStreamReader(
+                    socket.getInputStream(), StandardCharsets.UTF_8));
 
             tcpOut.println("HELLO|" + junctionId);
+            if (tcpOut.checkError()) throw new IOException("Could not send HELLO to server");
+            String welcome = tcpIn.readLine();
+            if (welcome == null || !welcome.startsWith("WELCOME|" + junctionId)) {
+                throw new IOException(welcome == null ? "Server closed the connection during login" : welcome);
+            }
+            socket.setSoTimeout(0);
+
+            localUdpClient = new UDPClient(serverHost, TrafficCenter.UDP_PORT);
+            udpClient = localUdpClient;
+            final TrafficSimulator simulator = new TrafficSimulator();
+            final BlockingQueue<SignalCommand> signalQueue =
+                    new LinkedBlockingQueue<SignalCommand>();
+            final Socket clientSocket = socket;
+
             System.out.println("==============================================");
             System.out.println("          SMARTGRID " + junctionId + " CLIENT");
             System.out.println("==============================================");
             System.out.println("Connected to server " + serverHost);
             System.out.println("Automatic traffic simulation is ON.");
+            System.out.println("TCP heartbeat is enabled; disconnects are detected automatically.");
 
-            Thread receiver = new Thread(new Runnable() {
+            // This thread only receives messages. It never sleeps for a signal phase.
+            receiver = new Thread(new Runnable() {
                 public void run() {
                     try {
                         String line;
-                        while ((line = tcpIn.readLine()) != null) {
+                        while (running && (line = tcpIn.readLine()) != null) {
                             if (line.startsWith("SIGNAL_COMMAND|")) {
                                 SignalCommand command = SignalCommand.fromPacketString(line);
-                                displayCommand(command);
+                                if (!junctionId.equals(command.getJunctionId())) {
+                                    System.out.println("[TCP] Ignored command for another junction");
+                                } else {
+                                    signalQueue.offer(command);
+                                }
+                            } else if (line.startsWith("PONG|")) {
+                                // Heartbeat response; no need to print every one.
                             } else {
                                 System.out.println("[SERVER] " + line);
+                                if (line.startsWith("ERROR|Junction already connected")) {
+                                    running = false;
+                                }
                             }
                         }
                     } catch (Exception ex) {
@@ -63,24 +100,48 @@ public class JunctionClient {
                     }
                 }
             }, "Server-Message-Receiver");
+            receiver.setDaemon(true);
             receiver.start();
 
-            Thread sender = new Thread(new Runnable() {
+            // Signal display runs separately so the TCP receiver remains responsive.
+            signalWorker = new Thread(new Runnable() {
                 public void run() {
-                    TrafficSimulator simulator = new TrafficSimulator();
                     while (running) {
-                        if (automaticMode) {
-                            try {
+                        try {
+                            SignalCommand command = signalQueue.take();
+                            displayCommand(command, simulator);
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        }
+                    }
+                }
+            }, "Signal-Phase-Display");
+            signalWorker.setDaemon(true);
+            signalWorker.start();
+
+            sender = new Thread(new Runnable() {
+                public void run() {
+                    long lastHeartbeat = 0L;
+                    while (running) {
+                        try {
+                            if (automaticMode) {
                                 TrafficUpdate update = simulator.generateRandom(junctionId);
                                 udpClient.send(update);
-                                System.out.println("[UDP] Sent traffic update: "
-                                        + junctionId + " at " + update.getTimestamp());
-                            } catch (Exception ex) {
-                                System.out.println("[UDP] Send failed: " + ex.getMessage());
+                                System.out.println("[UDP] Traffic update sent: " + junctionId);
                             }
+                            long now = System.currentTimeMillis();
+                            if (now - lastHeartbeat >= SmartGridConfig.CLIENT_HEARTBEAT_INTERVAL_MS) {
+                                sendTcp("HEARTBEAT|" + junctionId);
+                                lastHeartbeat = now;
+                            }
+                        } catch (Exception ex) {
+                            System.out.println("[CLIENT] Communication failed: " + ex.getMessage());
+                            running = false;
+                            break;
                         }
                         try {
-                            Thread.sleep(3000);
+                            Thread.sleep(SmartGridConfig.TRAFFIC_UPDATE_INTERVAL_MS);
                         } catch (InterruptedException ex) {
                             Thread.currentThread().interrupt();
                             break;
@@ -88,19 +149,53 @@ public class JunctionClient {
                     }
                 }
             }, "Traffic-Sensor-Simulator");
+            sender.setDaemon(true);
             sender.start();
 
-            Scanner scanner = new Scanner(System.in);
-            printHelp();
+            // Console input is daemonized. The main thread can exit immediately
+            // when the server disconnects, even if the user is not typing.
+            Thread inputThread = new Thread(new Runnable() {
+                public void run() {
+                    runConsole(clientSocket);
+                }
+            }, "Junction-Console-Input");
+            inputThread.setDaemon(true);
+            inputThread.start();
+
             while (running) {
-                System.out.print(junctionId + "> ");
-                if (!scanner.hasNextLine()) break;
-                String line = scanner.nextLine().trim();
-                if (line.length() == 0) continue;
+                try {
+                    Thread.sleep(250L);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        } catch (Exception ex) {
+            System.out.println("[CLIENT] Could not connect: " + ex.getMessage());
+            System.out.println("Start TrafficCenter first and check the server IP/port.");
+        } finally {
+            running = false;
+            try { socket.close(); } catch (Exception ignored) { }
+            if (localUdpClient != null) localUdpClient.close();
+            if (sender != null) sender.interrupt();
+            if (receiver != null) receiver.interrupt();
+            if (signalWorker != null) signalWorker.interrupt();
+            System.out.println(junctionId + " client stopped.");
+        }
+    }
 
-                String[] parts = line.split("\\s+");
-                String command = parts[0].toLowerCase();
+    private static void runConsole(Socket socket) {
+        Scanner scanner = new Scanner(System.in);
+        printHelp();
+        while (running) {
+            System.out.print(junctionId + "> ");
+            if (!scanner.hasNextLine()) break;
+            String line = scanner.nextLine().trim();
+            if (line.length() == 0) continue;
 
+            String[] parts = line.split("\\s+");
+            String command = parts[0].toLowerCase();
+            try {
                 if ("help".equals(command)) {
                     printHelp();
                 } else if ("auto".equals(command)) {
@@ -111,67 +206,53 @@ public class JunctionClient {
                     System.out.println("Automatic traffic simulation OFF. Use 'traffic' to enter data.");
                 } else if ("traffic".equals(command)) {
                     automaticMode = false;
-                    try {
-                        TrafficUpdate update = TrafficSimulator.readManual(junctionId, scanner);
-                        udpClient.send(update);
-                        System.out.println("[UDP] Manual traffic update sent.");
-                    } catch (Exception ex) {
-                        System.out.println("Could not send manual update: " + ex.getMessage());
-                    }
+                    TrafficUpdate update = TrafficSimulator.readManual(junctionId, scanner);
+                    udpClient.send(update);
+                    System.out.println("[UDP] Manual traffic update sent.");
                 } else if ("ped".equals(command) && parts.length == 3) {
-                    try {
-                        PedestrianRequest request = new PedestrianRequest(
-                                junctionId, parts[1], Integer.parseInt(parts[2]),
-                                System.currentTimeMillis());
-                        sendTcp(request.toPacketString());
-                    } catch (Exception ex) {
-                        System.out.println("Usage: ped NORTH 4 (direction and count)");
-                    }
+                    PedestrianRequest request = new PedestrianRequest(junctionId,
+                            parts[1], Integer.parseInt(parts[2]), System.currentTimeMillis());
+                    sendTcp(request.toPacketString());
                 } else if ("emergency".equals(command) && parts.length == 3) {
-                    try {
-                        EmergencyRequest request = new EmergencyRequest(
-                                junctionId, parts[1], parts[2],
-                                System.currentTimeMillis());
-                        sendTcp(request.toPacketString());
-                    } catch (Exception ex) {
-                        System.out.println("Usage: emergency NORTH AMBULANCE");
-                    }
+                    EmergencyRequest request = new EmergencyRequest(junctionId,
+                            parts[1], parts[2], System.currentTimeMillis());
+                    sendTcp(request.toPacketString());
                 } else if ("quit".equals(command)) {
                     running = false;
+                    try { socket.close(); } catch (Exception ignored) { }
                     break;
                 } else {
                     System.out.println("Unknown command. Type help.");
                 }
+            } catch (Exception ex) {
+                System.out.println("[INPUT] " + ex.getMessage());
+                System.out.println("Check the command format and try again.");
             }
-
-            running = false;
-            try { socket.close(); } catch (Exception ignored) { }
-            udpClient.close();
-            System.out.println(junctionId + " client stopped.");
-        } catch (Exception ex) {
-            System.out.println("[CLIENT] Could not connect: " + ex.getMessage());
-            System.out.println("Start TrafficCenter first and check the server IP/port.");
-            ex.printStackTrace();
         }
     }
 
-    private static void sendTcp(String message) {
+    private static void sendTcp(String message) throws IOException {
         synchronized (tcpOut) {
             tcpOut.println(message);
+            if (tcpOut.checkError()) {
+                running = false;
+                throw new IOException("TCP connection is not available");
+            }
         }
-        System.out.println("[TCP] Sent: " + message);
+        if (!message.startsWith("HEARTBEAT|")) {
+            System.out.println("[TCP] Sent: " + message);
+        }
     }
 
-    private static void displayCommand(SignalCommand command) {
+    private static void displayCommand(SignalCommand command, TrafficSimulator simulator) {
         try {
             System.out.println();
             System.out.println("========== SIGNAL CHANGE: " + junctionId + " ==========");
             System.out.println("Received: " + command.toPacketString());
-
             System.out.println("YELLOW: current vehicle phase changing...");
-            Thread.sleep(1000);
-            System.out.println("ALL RED: safety clearance...");
-            Thread.sleep(1000);
+            Thread.sleep(1000L);
+            System.out.println("ALL RED: clearance phase...");
+            Thread.sleep(1000L);
 
             if ("PEDESTRIAN".equals(command.getPhaseType())) {
                 System.out.println("ALL VEHICLE SIGNALS: RED");
@@ -179,12 +260,17 @@ public class JunctionClient {
             } else {
                 System.out.println("GREEN: " + command.getPhaseName());
                 System.out.println("Other approaches: RED");
+                if ("EMERGENCY".equals(command.getMode())) {
+                    System.out.println("EMERGENCY PRIORITY: " + command.getPriorityVehicle());
+                }
             }
+            System.out.println("Active duration: " + command.getDurationSeconds() + " seconds");
+            Thread.sleep(command.getDurationSeconds() * 1000L);
 
-            if ("EMERGENCY".equals(command.getMode())) {
-                System.out.println("EMERGENCY PRIORITY: " + command.getPriorityVehicle());
+            if ("VEHICLE".equals(command.getPhaseType())) {
+                simulator.applyGreen(command.getPhaseName(), command.getDurationSeconds());
             }
-            System.out.println("Duration: " + command.getDurationSeconds() + " seconds");
+            System.out.println("Phase completed: " + command.getPhaseName());
             System.out.println("==============================================");
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();

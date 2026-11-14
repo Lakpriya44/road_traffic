@@ -12,7 +12,7 @@ public class SignalCommand {
 
     public SignalCommand(String junctionId, String phaseType, String phaseName,
             int durationSeconds, String mode, String priorityVehicle, long timestamp) {
-        if (junctionId == null || !junctionId.matches("J0[1-3]")) {
+        if (!SmartGridConfig.isValidJunctionId(junctionId)) {
             throw new IllegalArgumentException("Junction ID must be J01, J02 or J03");
         }
         String pt = phaseType == null ? "" : phaseType.trim().toUpperCase();
@@ -42,6 +42,9 @@ public class SignalCommand {
         }
         if ("EMERGENCY".equals(m) && (!"VEHICLE".equals(pt) || "NONE".equals(pv))) {
             throw new IllegalArgumentException("Emergency command must be a vehicle phase with a priority vehicle");
+        }
+        if (timestamp <= 0) {
+            throw new IllegalArgumentException("Timestamp must be positive");
         }
 
         this.junctionId = junctionId;

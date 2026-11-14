@@ -1,42 +1,56 @@
 package smartgrid;
 
 import java.util.Random;
+import java.util.Scanner;
 
-/** Creates simulated traffic sensor readings for one junction. */
+/** Creates simple stateful simulated arrivals and queues for one junction. */
 public class TrafficSimulator {
     private final Random random = new Random();
+    private final String[] directions = {"NORTH", "EAST", "SOUTH", "WEST"};
+    private final int[] queues = {0, 0, 0, 0};
+    private final int[] waitingSeconds = {0, 0, 0, 0};
 
-    public TrafficUpdate generateRandom(String junctionId) {
+    public synchronized TrafficUpdate generateRandom(String junctionId) {
+        ApproachData[] approaches = new ApproachData[4];
+        for (int i = 0; i < directions.length; i++) {
+            int left = random.nextInt(3);
+            int straight = random.nextInt(5);
+            int right = random.nextInt(3);
+            int arrivals = left + straight + right;
+            queues[i] = Math.min(100, queues[i] + arrivals);
+            waitingSeconds[i] = queues[i] == 0 ? 0 : Math.min(600, waitingSeconds[i] + 3);
+            approaches[i] = new ApproachData(directions[i], left, straight,
+                    right, queues[i], waitingSeconds[i]);
+        }
         return new TrafficUpdate(junctionId, System.currentTimeMillis(),
-                randomApproach("NORTH"), randomApproach("EAST"),
-                randomApproach("SOUTH"), randomApproach("WEST"));
+                approaches[0], approaches[1], approaches[2], approaches[3]);
     }
 
-    private ApproachData randomApproach(String direction) {
-        int left = random.nextInt(11);
-        int straight = random.nextInt(21);
-        int right = random.nextInt(11);
-        int queue = random.nextInt(31);
-        int waiting = random.nextInt(61);
-        return new ApproachData(direction, left, straight, right, queue, waiting);
+    /** A completed vehicle green drains the selected simulated queue. */
+    public synchronized void applyGreen(String direction, int durationSeconds) {
+        for (int i = 0; i < directions.length; i++) {
+            if (directions[i].equalsIgnoreCase(direction)) {
+                int served = Math.max(1, durationSeconds * 2);
+                queues[i] = Math.max(0, queues[i] - served);
+                if (queues[i] == 0) waitingSeconds[i] = 0;
+                else waitingSeconds[i] = Math.max(0, waitingSeconds[i] - durationSeconds);
+                return;
+            }
+        }
     }
 
-    public static TrafficUpdate readManual(String junctionId,
-            java.util.Scanner scanner) {
+    public static TrafficUpdate readManual(String junctionId, Scanner scanner) {
         System.out.println("Enter values for each approach.");
-        System.out.println("For each direction enter: LEFT STRAIGHT RIGHT QUEUE WAIT_SECONDS");
-
+        System.out.println("For each approach enter: LEFT STRAIGHT RIGHT QUEUE WAIT_SECONDS");
         ApproachData north = readApproach("NORTH", scanner);
         ApproachData east = readApproach("EAST", scanner);
         ApproachData south = readApproach("SOUTH", scanner);
         ApproachData west = readApproach("WEST", scanner);
-
         return new TrafficUpdate(junctionId, System.currentTimeMillis(),
                 north, east, south, west);
     }
 
-    private static ApproachData readApproach(String direction,
-            java.util.Scanner scanner) {
+    private static ApproachData readApproach(String direction, Scanner scanner) {
         while (true) {
             System.out.print(direction + " (left straight right queue wait): ");
             try {
@@ -47,7 +61,7 @@ public class TrafficSimulator {
                 int wait = scanner.nextInt();
                 return new ApproachData(direction, left, straight, right, queue, wait);
             } catch (Exception ex) {
-                System.out.println("Please enter five whole numbers, all zero or greater.");
+                System.out.println("Please enter five valid whole numbers within the allowed limits.");
                 if (scanner.hasNextLine()) scanner.nextLine();
             }
         }

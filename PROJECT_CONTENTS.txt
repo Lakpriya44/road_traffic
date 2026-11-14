@@ -1,4 +1,8 @@
-SmartGrid Eclipse project files generated for EC5205.
-Main class: smartgrid.TrafficCenter
-Client class: smartgrid.JunctionClient
-Packet test: smartgrid.PacketTest
+SmartGrid Eclipse Java project for EC5205.
+Package: smartgrid
+Main server: smartgrid.TrafficCenter
+Main client: smartgrid.JunctionClient
+Packet tests: smartgrid.PacketTest
+TCP: 6655
+UDP: 4442
+Java: 8 or later

@@ -16,8 +16,11 @@ public class TrafficUpdate {
             ApproachData north, ApproachData east,
             ApproachData south, ApproachData west) {
 
-        if (junctionId == null || !junctionId.matches("J0[1-3]")) {
+        if (!SmartGridConfig.isValidJunctionId(junctionId)) {
             throw new IllegalArgumentException("Junction ID must be J01, J02 or J03");
+        }
+        if (timestamp <= 0) {
+            throw new IllegalArgumentException("Timestamp must be positive");
         }
         if (north == null || east == null || south == null || west == null) {
             throw new IllegalArgumentException("All four approaches are required");

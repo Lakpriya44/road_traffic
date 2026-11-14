@@ -31,6 +31,11 @@ public class ApproachData {
                 || waitingTimeSeconds < 0) {
             throw new IllegalArgumentException("Traffic values cannot be negative");
         }
+        if (leftTurnVehicles > 10000 || straightVehicles > 10000
+                || rightTurnVehicles > 10000 || queueLength > 10000
+                || waitingTimeSeconds > 86400) {
+            throw new IllegalArgumentException("Traffic value exceeds the allowed simulation limit");
+        }
 
         this.direction = normalized;
         this.leftTurnVehicles = leftTurnVehicles;
