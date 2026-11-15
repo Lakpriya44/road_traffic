@@ -117,12 +117,15 @@ public class JunctionHandler extends Thread {
             }
         } finally {
             if (registered) {
+                // Only the session that owns this junction ID may clear its data,
+                // and the check + removal happen under one lock, so a quick
+                // reconnect can never have its fresh registration wiped.
                 synchronized (clients) {
                     if (clients.get(junctionId) == outbound) {
                         clients.remove(junctionId);
+                        store.unregisterJunction(junctionId);
                     }
                 }
-                store.unregisterJunction(junctionId);
                 System.out.println("[TCP] " + junctionId + " disconnected");
             }
             if (writerThread != null) writerThread.interrupt();

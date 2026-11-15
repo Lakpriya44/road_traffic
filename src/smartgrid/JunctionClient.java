@@ -18,6 +18,10 @@ public class JunctionClient {
     private static PrintWriter tcpOut;
     private static UDPClient udpClient;
     private static String junctionId;
+    // Last snapshot typed with the 'traffic' command. It is re-sent every
+    // update interval, because the server discards data older than 10 s.
+    private static volatile TrafficUpdate lastManualUpdate;
+    private static long lastTimestamp = 0L;
 
     public static void main(String[] args) {
         if (args.length < 1) {
@@ -35,6 +39,7 @@ public class JunctionClient {
 
         running = true;
         automaticMode = true;
+        lastManualUpdate = null;
         Socket socket = new Socket();
         Thread receiver = null;
         Thread sender = null;
@@ -88,9 +93,6 @@ public class JunctionClient {
                                 // Heartbeat response; no need to print every one.
                             } else {
                                 System.out.println("[SERVER] " + line);
-                                if (line.startsWith("ERROR|Junction already connected")) {
-                                    running = false;
-                                }
                             }
                         }
                     } catch (Exception ex) {
@@ -126,9 +128,11 @@ public class JunctionClient {
                     while (running) {
                         try {
                             if (automaticMode) {
-                                TrafficUpdate update = simulator.generateRandom(junctionId);
-                                udpClient.send(update);
+                                sendTraffic(simulator.generateRandom(junctionId));
                                 System.out.println("[UDP] Traffic update sent: " + junctionId);
+                            } else {
+                                TrafficUpdate manual = lastManualUpdate;
+                                if (manual != null) sendTraffic(manual);
                             }
                             long now = System.currentTimeMillis();
                             if (now - lastHeartbeat >= SmartGridConfig.CLIENT_HEARTBEAT_INTERVAL_MS) {
@@ -203,12 +207,15 @@ public class JunctionClient {
                     System.out.println("Automatic traffic simulation ON.");
                 } else if ("manual".equals(command)) {
                     automaticMode = false;
-                    System.out.println("Automatic traffic simulation OFF. Use 'traffic' to enter data.");
+                    System.out.println("Automatic traffic simulation OFF. Use 'traffic' to enter data;"
+                            + " the last entered snapshot is re-sent every 3 s.");
                 } else if ("traffic".equals(command)) {
                     automaticMode = false;
                     TrafficUpdate update = TrafficSimulator.readManual(junctionId, scanner);
-                    udpClient.send(update);
-                    System.out.println("[UDP] Manual traffic update sent.");
+                    lastManualUpdate = update;
+                    sendTraffic(update);
+                    System.out.println("[UDP] Manual traffic update sent"
+                            + " (re-sent every 3 s until you type 'auto').");
                 } else if ("ped".equals(command) && parts.length == 3) {
                     PedestrianRequest request = new PedestrianRequest(junctionId,
                             parts[1], Integer.parseInt(parts[2]), System.currentTimeMillis());
@@ -229,6 +236,17 @@ public class JunctionClient {
                 System.out.println("Check the command format and try again.");
             }
         }
+    }
+
+    /** Every UDP snapshot gets a strictly increasing timestamp so the server never rejects it as out-of-order. */
+    private static void sendTraffic(TrafficUpdate update) throws Exception {
+        udpClient.send(restamp(update));
+    }
+
+    private static synchronized TrafficUpdate restamp(TrafficUpdate u) {
+        lastTimestamp = Math.max(System.currentTimeMillis(), lastTimestamp + 1);
+        return new TrafficUpdate(u.getJunctionId(), lastTimestamp,
+                u.getNorth(), u.getEast(), u.getSouth(), u.getWest());
     }
 
     private static void sendTcp(String message) throws IOException {

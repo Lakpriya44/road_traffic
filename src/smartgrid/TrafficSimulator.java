@@ -13,9 +13,12 @@ public class TrafficSimulator {
     public synchronized TrafficUpdate generateRandom(String junctionId) {
         ApproachData[] approaches = new ApproachData[4];
         for (int i = 0; i < directions.length; i++) {
-            int left = random.nextInt(3);
-            int straight = random.nextInt(5);
-            int right = random.nextInt(3);
+            // Average arrival is about 0.83 vehicles per approach per update (3 s),
+            // roughly 0.28 vehicles/s. This is well below what one green phase
+            // can clear, so queues rise and fall instead of saturating at the cap.
+            int left = random.nextInt(6) == 0 ? 1 : 0;
+            int straight = random.nextInt(2);
+            int right = random.nextInt(6) == 0 ? 1 : 0;
             int arrivals = left + straight + right;
             queues[i] = Math.min(100, queues[i] + arrivals);
             waitingSeconds[i] = queues[i] == 0 ? 0 : Math.min(600, waitingSeconds[i] + 3);

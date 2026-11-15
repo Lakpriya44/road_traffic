@@ -1,0 +1,83 @@
+SMARTGRID CORRECTED BUILD - CHANGE SUMMARY
+==========================================
+
+1. Signal scheduling
+   - Green / pedestrian active duration is now honored.
+   - Client receiver thread no longer sleeps during signal transitions.
+   - One signal phase is scheduled at a time per junction.
+   - The next phase is scheduled after 1 second yellow + 1 second all-red
+     + the commanded active duration.
+
+2. Requests
+   - Pedestrian and emergency requests use bounded per-junction queues.
+   - ACK is sent only after the request is accepted into the queue.
+   - Emergency requests are selected before pedestrian requests.
+   - Requests are served at the next phase boundary, not by interrupting
+     an active phase. Disconnected junction queues are cleared.
+
+3. Traffic data / corridor
+   - Traffic data expires after 10 seconds based on server receive time.
+   - Out-of-order updates from the same client are rejected.
+   - UDP sender IP must match the registered TCP connection IP.
+   - Corridor mapping now follows the documented side-of-arrival convention.
+
+4. Network handling
+   - Client TCP connect timeout and server handshake / heartbeat timeouts.
+   - Client sends a heartbeat every 10 seconds; server expires after 30 seconds.
+   - Client checks PrintWriter errors and exits when server connection ends.
+   - Server uses a separate bounded outbound queue / writer thread per client.
+   - TCP line length is limited; oversized UDP packets are rejected.
+   - Server accept errors and shutdown are handled more cleanly.
+
+5. Simulation / control / tests
+   - Automatic simulated queues accumulate arrivals and are reduced after green.
+   - Simple anti-starvation selection rule added.
+   - Pedestrian duration responds to the number waiting.
+   - Vehicle counts and other input values have upper bounds.
+   - PacketTest now performs 4 round-trip tests and 5 invalid-input tests.
+   - README and Linux run instructions updated.
+
+VERIFICATION
+------------
+- Compiled with javac -Xlint:all (no compiler warnings).
+- PacketTest passed all 9 checks.
+- Local three-client integration test passed: J01, J02 and J03 connected,
+  all sent UDP updates, server sent signal commands, and all clients exited.
+- Emergency request integration test confirmed ACK, queueing, and an
+  emergency signal after the current phase completed.
+
+KNOWN SIMULATION LIMITS
+-----------------------
+- Emergency / pedestrian requests wait for the current phase to finish;
+  they do not preempt an active green.
+- The client does not automatically reconnect after a server failure;
+  restart the client after the server is available again.
+- This is an academic simulation, not a certified road traffic controller.
+
+
+UPDATE 2 (demo-readiness fixes)
+===============================
+1. TrafficSimulator: arrival rate lowered (about 0.83 vehicles per approach
+   per 3 s). Before, queues hit the cap of 100 within about a minute and every
+   green became 25 s. Now queues fluctuate (observed maximum around 30-40) and
+   green times vary.
+2. JunctionClient: a snapshot entered with 'traffic' is re-sent every 3 s
+   (fresh timestamp) so the server does not discard it after 10 s. All UDP
+   snapshots now use a strictly increasing timestamp.
+3. JunctionHandler: disconnect cleanup (remove from client map + clear stored
+   data) now happens under one lock and only for the session that owns the ID,
+   so a quick reconnect cannot have its registration wiped.
+4. JunctionClient: removed an unreachable 'Junction already connected' check
+   in the receiver thread (the login step already reports that error).
+5. README: added troubleshooting for Wi-Fi client isolation, UDP firewall and
+   multiple network adapters.
+
+Verified after the changes: compiles with -Xlint:all (no warnings), PacketTest
+passes, and a local three-client run showed ped + emergency ACKs and signal
+phases, varying green times, and J03 manual snapshot producing decisions for
+the whole run instead of stopping after about 10 s.
+
+STILL TRUE (not changed)
+------------------------
+- Pedestrian / emergency requests wait for the active phase to finish.
+- No automatic client reconnect after a server failure.

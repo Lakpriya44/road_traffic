@@ -94,9 +94,13 @@ every 3 seconds. It also sends a TCP heartbeat every 10 seconds.
       Enable automatic simulated traffic data.
 
   manual
-      Stop automatic traffic updates (TCP heartbeat continues).
+      Stop automatic traffic updates (TCP heartbeat continues). If you have
+      already entered a snapshot with 'traffic', that snapshot keeps being
+      re-sent every 3 seconds (fresh timestamp) so it does not expire.
 
   traffic
+      Switches to manual mode and sends the values you type; the same
+      snapshot is then re-sent every 3 seconds until you type 'auto'.
       Enter manual values for NORTH, EAST, SOUTH and WEST.
       For each approach enter five whole numbers:
       LEFT STRAIGHT RIGHT QUEUE WAIT_SECONDS
@@ -126,6 +130,9 @@ PART F - DEMONSTRATION ORDER
 7. Type "ped NORTH 4" and show the queued pedestrian phase.
 8. Type "emergency NORTH AMBULANCE" and show emergency priority.
 9. Show the simulator's selected vehicle queue decreasing after its green.
+   (Simulated arrivals are low enough that queues rise and fall, typically
+   staying below about 40 vehicles, so green times vary between roughly 8 and
+   25 seconds instead of sitting at the maximum.)
 
 NETWORK / CONTROL BEHAVIOUR
 ---------------------------
@@ -197,6 +204,12 @@ TROUBLESHOOTING
 No UDP updates:
   Check UDP port 4442, firewall, server IP and that the TCP client connected
   successfully first. The server accepts UDP only from the registered TCP IP.
+
+Clients connect over TCP but no UDP updates appear (or J02/J03 cannot connect):
+  Some university/public Wi-Fi networks block laptop-to-laptop traffic
+  ("client isolation"). Use a phone hotspot or a switch/router you control.
+  Also open UDP 4442 (not only TCP 6655) in the server laptop firewall, and
+  turn off VPN / virtual network adapters that may change the source IP.
 
 "Junction already connected":
   Only one client with a given ID (J01/J02/J03) can be connected at a time.
