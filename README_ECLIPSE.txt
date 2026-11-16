@@ -217,3 +217,25 @@ Clients connect over TCP but no UDP updates appear (or J02/J03 cannot connect):
 
 If the server closes unexpectedly, the client should print a disconnect message
 and stop instead of waiting indefinitely for another keyboard command.
+
+
+LIVE DASHBOARD (for the evaluation panel)
+=========================================
+When TrafficCenter starts it also serves a live web dashboard on port 8080.
+Open it in any browser:
+
+  Laptop 1:         http://localhost:8080
+  Another laptop:   http://SERVER_LAN_IP:8080   (allow TCP 8080 in the firewall)
+
+It shows each junction's signal lights, queues, demand scores, the active
+phase with a countdown, emergency / pedestrian phases, counters, and a live
+event log (Network, Requests, and the raw Server console tab).
+It is read-only and updates by itself; all command-line commands on the clients
+(ped, emergency, manual, traffic, auto, quit) work exactly as before, and the
+server console keeps printing at the same time.
+
+Notes:
+- Run the server from the project folder (Eclipse does this by default) because
+  the page is read from web/dashboard.html.
+- The dashboard needs no internet; it uses no external libraries or fonts.
+- If port 8080 is busy, the server prints a warning and keeps running without it.

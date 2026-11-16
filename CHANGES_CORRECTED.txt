@@ -81,3 +81,11 @@ STILL TRUE (not changed)
 ------------------------
 - Pedestrian / emergency requests wait for the active phase to finish.
 - No automatic client reconnect after a server failure.
+
+UPDATE 3 (live dashboard)
+=========================
+- New DashboardHub.java: tiny HTTP server (JDK built-in) with Server-Sent Events.
+- New web/dashboard.html: live control-room page, no external dependencies.
+- One-line hooks in TrafficCenter, UDPReceiver, TrafficDecisionThread and
+  JunctionHandler publish events; the server console is mirrored, not replaced.
+- SmartGridConfig.DASHBOARD_PORT = 8080.

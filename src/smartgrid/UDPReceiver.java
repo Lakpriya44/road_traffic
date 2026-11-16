@@ -39,6 +39,7 @@ public class UDPReceiver extends Thread {
                     continue;
                 }
 
+                DashboardHub.publish("traffic", update.toPacketString());
                 System.out.println("[UDP] Received " + update.getJunctionId()
                         + " from " + packet.getAddress().getHostAddress()
                         + " | queues N/E/S/W="

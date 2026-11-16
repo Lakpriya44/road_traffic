@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SmartGrid Control Room</title>
+<style>
+:root{--bg:#16202b;--panel:#1f2c3a;--line:#31445a;--ink:#e8eef5;--mute:#8fa3b8;--udp:#4aa3ff;--tcp:#f2b84b;--red:#ef4b4b;--amber:#f5b82e;--green:#33d17a;--road:#2a3a4c}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "Bahnschrift","DIN Alternate","Segoe UI",system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;padding:14px 22px;border-bottom:1px solid var(--line)}
+h1{font-size:22px;margin:0;font-weight:600;letter-spacing:.3px}header p{margin:0;color:var(--mute);max-width:46ch}
+.live{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--mute)}.dot{width:11px;height:11px;border-radius:50%;background:var(--red)}.live.on .dot{background:var(--green);animation:p 1.6s infinite}
+@keyframes p{50%{opacity:.35}}
+.stats{display:flex;gap:22px}.stat b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.stat span{color:var(--mute);font-size:13px}
+main{padding:18px 22px;display:grid;gap:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+.card.off{opacity:.55}.ch{display:flex;justify-content:space-between;align-items:center}.ch h2{margin:0;font-size:19px}
+.chip{font-size:13px;padding:2px 10px;border-radius:99px;background:#3a2b2b;color:#ff9b9b}.on .chip{background:#1d3a2c;color:#7ee2a8}
+svg{width:100%;max-width:300px;display:block;margin:6px auto}
+.ph{min-height:54px}.ph b{font-size:17px}.bar{height:7px;background:#2c3d50;border-radius:4px;margin:6px 0;overflow:hidden}.bar i{display:block;height:100%;background:var(--green);width:0}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:4px;margin-left:6px;font-weight:600}.em{background:var(--red);color:#fff;animation:p 1s infinite}.pd{background:#6d8cff;color:#fff}
+table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}th,td{padding:3px 4px;text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:500}tr.hl td{color:var(--green);font-weight:600}
+.two{display:grid;grid-template-columns:2fr 1fr;gap:18px}@media(max-width:900px){.two{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}.panel h3{margin:0 0 8px;font-size:16px}
+.tabs{display:flex;gap:6px;margin-bottom:8px}.tabs button{background:none;border:1px solid var(--line);color:var(--mute);padding:3px 12px;border-radius:99px;cursor:pointer;font:inherit;font-size:13px}.tabs button.a{background:var(--ink);color:var(--bg)}
+button:focus-visible{outline:2px solid var(--udp)}
+#log{height:260px;overflow:auto;font:13px/1.55 Consolas,"Courier New",monospace}#log div{border-bottom:1px solid #263648;padding:1px 0;white-space:pre-wrap}
+.k{display:inline-block;width:46px;font-weight:700}.k.udp{color:var(--udp)}.k.tcp{color:var(--tcp)}.k.req{color:#c79bff}.k.sys{color:var(--mute)}.t{color:var(--mute);margin-right:8px}
+.how ol{margin:0;padding-left:20px}.how li{margin-bottom:6px}.u{color:var(--udp)}.c{color:var(--tcp)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important}}
+</style></head><body>
+<header><div><h1>SmartGrid Control Room</h1><p>Three junctions send traffic to one server. The server decides who gets the green light.</p></div>
+<div class="stats"><div class="stat"><b id="sU">0</b><span>traffic snapshots (UDP)</span></div><div class="stat"><b id="sC">0</b><span>signal commands (TCP)</span></div><div class="stat"><b id="sP">0</b><span>pedestrian requests</span></div><div class="stat"><b id="sE">0</b><span>emergency requests</span></div></div>
+<div class="live" id="live"><i class="dot"></i><span id="liveT">Connecting to server...</span></div></header>
+<main><div class="cards" id="cards"></div>
+<div class="two"><div class="panel"><h3>What is happening on the network</h3>
+<div class="tabs" id="tabs"><button class="a" data-v="net">Network</button><button data-v="req">Requests</button><button data-v="raw">Server console</button></div><div id="log" aria-live="off"></div></div>
+<div class="panel how"><h3>How the server decides</h3><ol>
+<li>Each junction sends its queue every 3 s by <b class="u">UDP</b>. A lost packet does not matter, the next one replaces it.</li>
+<li>The server gives every approach a demand score: vehicles + 2 x queue + waiting time / 10.</li>
+<li>If the next junction is already jammed (over 20 queued), the score drops, so we do not push more cars into it.</li>
+<li>The highest score gets green for 8 to 25 s. Commands travel by <b class="c">TCP</b> so they are never lost.</li>
+<li>Emergency vehicles go first, then pedestrians, then normal traffic.</li></ol></div></div></main>
+<script>
+const D=['NORTH','EAST','SOUTH','WEST'],JS=['J01','J02','J03'],NEXT={J01:{WEST:['J02','WEST']},J02:{WEST:['J03','WEST'],EAST:['J01','EAST']},J03:{EAST:['J02','EAST']}};
+const J={},cnt={u:0,c:0,p:0,e:0},logs=[];let off=0,view='net';
+const cards=document.getElementById('cards');
+JS.forEach(id=>{J[id]={conn:false,tr:null,cmd:null};const d=document.createElement('div');d.className='card off';d.id='c'+id;
+d.innerHTML=`<div class="ch"><h2>Junction ${id}</h2><span class="chip">offline</span></div>
+<svg viewBox="0 0 240 240" role="img" aria-label="Junction ${id}"><rect x="95" y="0" width="50" height="240" fill="var(--road)"/><rect x="0" y="95" width="240" height="50" fill="var(--road)"/><rect x="95" y="95" width="50" height="50" fill="#33475c"/>
+<rect id="${id}qN" x="100" y="90" width="18" height="0" fill="var(--tcp)" rx="2"/><rect id="${id}qE" x="150" y="100" width="0" height="18" fill="var(--tcp)" rx="2"/><rect id="${id}qS" x="122" y="150" width="18" height="0" fill="var(--tcp)" rx="2"/><rect id="${id}qW" x="90" y="122" width="0" height="18" fill="var(--tcp)" rx="2"/>
+<circle id="${id}lN" cx="86" cy="86" r="9"/><circle id="${id}lE" cx="154" cy="86" r="9"/><circle id="${id}lS" cx="154" cy="154" r="9"/><circle id="${id}lW" cx="86" cy="154" r="9"/>
+<g fill="var(--ink)" font-size="13" font-weight="600"><text x="120" y="14" text-anchor="middle">N</text><text x="120" y="234" text-anchor="middle">S</text><text x="232" y="90" text-anchor="end">E</text><text x="8" y="164">W</text></g></svg>
+<div class="ph" id="${id}ph"></div>
+<table><tr><th>Approach</th><th>Queue</th><th>Wait s</th><th>Demand</th></tr>${D.map(x=>`<tr id="${id}r${x[0]}"><td>${x[0]+x.slice(1).toLowerCase()}</td><td>-</td><td>-</td><td>-</td></tr>`).join('')}</table>`;cards.appendChild(d)});
+const now=()=>Date.now()+off,$=id=>document.getElementById(id),hm=t=>new Date(t).toTimeString().slice(0,8);
+function parse(p){const o={};p.slice(3).forEach(s=>{const a=s.split(',');o[a[0]]={v:+a[1]+ +a[2]+ +a[3],q:+a[4],w:+a[5]}});return o}
+function score(id,x){const a=J[id].tr[x];if(!a)return 0;let s=a.v+2*a.q+a.w/10,n=(NEXT[id]||{})[x];if(n&&J[n[0]].tr&&J[n[0]].tr[n[1]]){const q=J[n[0]].tr[n[1]].q;if(q>20)s-=Math.min(20,(q-20)*.8)}return s}
+function add(k,t,text,ts){logs.unshift({k,t,text,ts});if(logs.length>300)logs.pop();draw()}
+function draw(){const want={net:['udp','tcp','sys'],req:['req'],raw:['raw']}[view];$('log').innerHTML=logs.filter(l=>want.includes(l.k)).slice(0,80).map(l=>`<div><span class="t">${hm(l.ts)}</span>${l.k==='raw'?'':`<span class="k ${l.k}">${l.k.toUpperCase()}</span>`}${l.text.replace(/</g,'&lt;')}</div>`).join('')}
+document.getElementById('tabs').onclick=e=>{if(e.target.dataset.v){view=e.target.dataset.v;[...e.currentTarget.children].forEach(b=>b.classList.toggle('a',b===e.target));draw()}};
+function handle(e){const d=e.d,p=d.split('|');
+if(e.t==='hello'){off=e.ts-Date.now();const c=p.map(Number);cnt.u=c[0];cnt.c=c[1];cnt.p=c[2];cnt.e=c[3];return}
+if(e.t==='join'){J[d].conn=true;add('sys',e.ts,d+' connected to the server (TCP)')}
+else if(e.t==='leave'){J[d].conn=false;J[d].cmd=null;J[d].tr=null;add('sys',e.ts,d+' disconnected')}
+else if(e.t==='traffic'){J[p[1]].tr=parse(p);if(!e.r)cnt.u++;add('udp',e.ts,`${p[1]} -> server  queues N${J[p[1]].tr.NORTH.q} E${J[p[1]].tr.EAST.q} S${J[p[1]].tr.SOUTH.q} W${J[p[1]].tr.WEST.q}`)}
+else if(e.t==='command'){J[p[1]].cmd={ph:p[2],dir:p[3],dur:+p[4],mode:p[5],veh:p[6],ts:e.ts};if(!e.r)cnt.c++;add('tcp',e.ts,`server -> ${p[1]}  ${p[2]==='PEDESTRIAN'?'WALK':'GREEN'} ${p[3]} for ${p[4]} s`+(p[5]==='EMERGENCY'?'  EMERGENCY '+p[6]:''))}
+else if(e.t==='ped'){if(!e.r)cnt.p++;add('req',e.ts,`${p[1]} asks to let ${p[3]} pedestrian(s) cross at ${p[2]}`)}
+else if(e.t==='emerg'){if(!e.r)cnt.e++;add('req',e.ts,`${p[1]} reports ${p[3]} arriving from ${p[2]}`)}
+else if(e.t==='log')add('raw',e.ts,d)}
+function frame(){$('sU').textContent=cnt.u;$('sC').textContent=cnt.c;$('sP').textContent=cnt.p;$('sE').textContent=cnt.e;
+JS.forEach(id=>{const j=J[id],c=$('c'+id);c.className='card '+(j.conn?'on':'off');c.querySelector('.chip').textContent=j.conn?'connected':'offline';
+let st={},go=null,h='<b>Waiting for data</b>';const cm=j.cmd;
+if(j.conn&&cm){const el=(now()-cm.ts)/1000;if(el<cm.dur+2){if(el<1){D.forEach(x=>st[x]='Y');h='<b>Changing: yellow</b>'}else if(el<2){D.forEach(x=>st[x]='R');h='<b>All red: clearing the junction</b>'}
+else{const left=Math.max(0,cm.dur+2-el);go=cm.dir;if(cm.ph==='PEDESTRIAN'){h=`<b>Pedestrians crossing at ${cm.dir}</b><span class="tag pd">WALK</span>`}else{st[cm.dir]='G';h=`<b>Green: ${cm.dir}</b> ${Math.ceil(left)} s left`+(cm.mode==='EMERGENCY'?`<span class="tag em">EMERGENCY ${cm.veh}</span>`:'')}
+h+=`<div class="bar"><i style="width:${(left/cm.dur*100).toFixed(0)}%"></i></div>`}}else h='<b>Phase finished</b> next command coming'}
+else if(j.conn)h='<b>Connected</b> waiting for the first decision';
+D.forEach(x=>{const n=x[0],col={G:'var(--green)',Y:'var(--amber)'}[st[x]]||'var(--red)',l=$(id+'l'+n);l.setAttribute('fill',col);l.style.filter=st[x]==='G'?'drop-shadow(0 0 6px var(--green))':'none';
+const a=j.tr&&j.tr[x],q=a?Math.min(a.q,40)/40*78:0,r=$(id+'q'+n);if(n==='N'||n==='S')r.setAttribute('height',q);else r.setAttribute('width',q);if(n==='N')r.setAttribute('y',90-q);if(n==='W')r.setAttribute('x',90-q);
+const row=$(id+'r'+n);if(a){const raw=a.v+2*a.q+a.w/10,s=score(id,x),pen=raw-s>.05?` (-${(raw-s).toFixed(0)})`:'';row.children[1].textContent=a.q;row.children[2].textContent=a.w;row.children[3].textContent=s.toFixed(0)+pen}
+row.className=(st[x]==='G'||(cm&&go===x&&j.cmd&&cm.ph==='PEDESTRIAN'))?'hl':''});
+$(id+'ph').innerHTML=h});}
+setInterval(frame,200);
+const es=new EventSource('events');es.onmessage=m=>handle(JSON.parse(m.data));
+es.onopen=()=>{$('live').className='live on';$('liveT').textContent='Live: connected to server'};es.onerror=()=>{$('live').className='live';$('liveT').textContent='Server not reachable, retrying...'};
+</script></body></html>

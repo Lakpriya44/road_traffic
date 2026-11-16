@@ -63,6 +63,7 @@ public class JunctionHandler extends Thread {
 
             socket.setSoTimeout(SmartGridConfig.TCP_HEARTBEAT_TIMEOUT_MS);
             startWriterThread();
+            DashboardHub.publish("join", junctionId);
             System.out.println("[TCP] " + junctionId + " connected from "
                     + socket.getInetAddress().getHostAddress());
             send("WELCOME|" + junctionId);
@@ -84,6 +85,7 @@ public class JunctionHandler extends Thread {
                         }
                         if (store.addPedestrianRequest(request)) {
                             send("ACK|PED_REQUEST|QUEUED");
+                            DashboardHub.publish("ped", line);
                             System.out.println("[REQUEST] Pedestrian request queued for " + junctionId);
                         } else {
                             send("ERROR|Pedestrian request queue is full");
@@ -95,6 +97,7 @@ public class JunctionHandler extends Thread {
                         }
                         if (store.addEmergencyRequest(request)) {
                             send("ACK|EMERGENCY_REQUEST|QUEUED");
+                            DashboardHub.publish("emerg", line);
                             System.out.println("[REQUEST] Emergency request queued for " + junctionId);
                         } else {
                             send("ERROR|Emergency request queue is full");
@@ -126,6 +129,7 @@ public class JunctionHandler extends Thread {
                         store.unregisterJunction(junctionId);
                     }
                 }
+                DashboardHub.publish("leave", junctionId);
                 System.out.println("[TCP] " + junctionId + " disconnected");
             }
             if (writerThread != null) writerThread.interrupt();

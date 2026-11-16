@@ -75,6 +75,7 @@ public class TrafficDecisionThread extends Thread {
                             System.out.println("[TCP] Queued: " + command.toPacketString());
                         }
 
+                        DashboardHub.publish("command", command.toPacketString());
                         // The client performs 1s yellow + 1s all-red before
                         // displaying the commanded green/walk duration.
                         long occupiedMs = (command.getDurationSeconds()

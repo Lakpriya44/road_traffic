@@ -24,6 +24,8 @@ public class TrafficCenter {
         final DatagramSocket udpSocket;
         final TrafficDecisionThread decisionThread;
 
+        DashboardHub.installConsoleTee();
+        DashboardHub.start(SmartGridConfig.DASHBOARD_PORT);
         System.out.println("==============================================");
         System.out.println("       SMARTGRID TRAFFIC CONTROL CENTER");
         System.out.println("==============================================");
