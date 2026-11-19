@@ -24,6 +24,6 @@ Terminal 4 - J03 on Laptop 3:
 Replace SERVER_LAN_IP with Laptop 1's IPv4 address (run hostname -I on Laptop 1).
 All laptops must be on the same LAN/Wi-Fi. Allow TCP 6655 and UDP 4442 on Laptop 1.
 
-Dashboard: after starting the server, open http://localhost:8080 (or
-http://SERVER_LAN_IP:8080 from another laptop). Start the server from the
+Dashboard: after starting the server, open http://localhost:8082 (or
+http://SERVER_LAN_IP:8082 from another laptop). Start the server from the
 SmartGrid_Eclipse folder so web/dashboard.html is found.

@@ -25,6 +25,7 @@ public class TrafficCenter {
         final TrafficDecisionThread decisionThread;
 
         DashboardHub.installConsoleTee();
+        DashboardGateway.attach(store, clients);
         DashboardHub.start(SmartGridConfig.DASHBOARD_PORT);
         System.out.println("==============================================");
         System.out.println("       SMARTGRID TRAFFIC CONTROL CENTER");

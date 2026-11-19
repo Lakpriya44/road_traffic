@@ -50,10 +50,22 @@ public class TrafficDecisionThread extends Thread {
                     EmergencyRequest emergency = store.takeEmergencyRequest(id);
                     if (emergency != null) {
                         command = controller.emergencyCommand(emergency);
+                        DashboardHub.publishRequestState(store, id);
+                        DashboardHub.publish("decision", "DECISION|" + id + "|EMERGENCY|"
+                                + emergency.getDirection() + "|0|" + command.getDurationSeconds() + "|0||"
+                                + emergency.getVehicleType() + " from " + emergency.getDirection()
+                                + ": emergency requests take priority over pedestrian and normal traffic,"
+                                + " and are served at the phase boundary.");
                     } else {
                         PedestrianRequest pedestrian = store.takePedestrianRequest(id);
                         if (pedestrian != null) {
                             command = controller.pedestrianCommand(pedestrian);
+                            DashboardHub.publishRequestState(store, id);
+                            DashboardHub.publish("decision", "DECISION|" + id + "|PEDESTRIAN|"
+                                    + pedestrian.getCrossingDirection() + "|0|" + command.getDurationSeconds()
+                                    + "|0||Pedestrian request (" + pedestrian.getWaitingPedestrians()
+                                    + " waiting) served at the phase boundary; all vehicle approaches are red."
+                                    + " Duration grows with the number waiting.");
                         } else {
                             TrafficUpdate update = store.getTraffic(id);
                             if (update != null) {

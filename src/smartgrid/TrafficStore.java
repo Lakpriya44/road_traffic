@@ -117,6 +117,43 @@ public class TrafficStore {
         return null;
     }
 
+    /** True while the junction has a live TCP session. */
+    public synchronized boolean isRegistered(String junctionId) {
+        return registeredAddresses.containsKey(junctionId);
+    }
+
+    /**
+     * Snapshot of the pending request queues for the dashboard (read-only).
+     * Format: REQSTATE|J01|NORTH*4*ts,EAST*2*ts|NORTH*AMBULANCE*ts
+     * (pedestrian entries are DIRECTION*count, emergency entries DIRECTION*TYPE).
+     */
+    public synchronized String requestSnapshot(String junctionId) {
+        long now = System.currentTimeMillis();
+        StringBuilder ped = new StringBuilder();
+        ArrayDeque<TimedValue<PedestrianRequest>> pq = pedestrians.get(junctionId);
+        if (pq != null) {
+            for (TimedValue<PedestrianRequest> item : pq) {
+                if (now - item.receivedAt > SmartGridConfig.REQUEST_MAX_AGE_MS) continue;
+                if (ped.length() > 0) ped.append(',');
+                ped.append(item.value.getCrossingDirection()).append('*')
+                        .append(item.value.getWaitingPedestrians()).append('*')
+                        .append(item.value.getTimestamp());
+            }
+        }
+        StringBuilder emg = new StringBuilder();
+        ArrayDeque<TimedValue<EmergencyRequest>> eq = emergencies.get(junctionId);
+        if (eq != null) {
+            for (TimedValue<EmergencyRequest> item : eq) {
+                if (now - item.receivedAt > SmartGridConfig.REQUEST_MAX_AGE_MS) continue;
+                if (emg.length() > 0) emg.append(',');
+                emg.append(item.value.getDirection()).append('*')
+                        .append(item.value.getVehicleType()).append('*')
+                        .append(item.value.getTimestamp());
+            }
+        }
+        return "REQSTATE|" + junctionId + "|" + ped + "|" + emg;
+    }
+
     /** Wake the decision thread when new data or a request arrives. */
     public synchronized void awaitChange(long timeoutMillis) throws InterruptedException {
         wait(timeoutMillis);

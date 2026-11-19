@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Read-only live dashboard. Pushes server events to browsers using
+ * Live dashboard + request gateway. Pushes server events to browsers using
  * Server-Sent Events (plain HTTP, built into the JDK, no libraries).
  * Failures here never affect the traffic server.
  */
@@ -49,7 +49,15 @@ public class DashboardHub {
                     if (recentLogs.size() > 120) recentLogs.removeFirst();
                 } else if ("join".equals(type) || "leave".equals(type)) {
                     state.put("conn:" + data, json);
-                } else if ("traffic".equals(type) || "command".equals(type)) {
+                    if ("leave".equals(type)) {
+                        // An offline junction must not replay stale data to new browsers.
+                        state.remove("traffic:" + data);
+                        state.remove("command:" + data);
+                        state.remove("decision:" + data);
+                        state.remove("reqstate:" + data);
+                    }
+                } else if ("traffic".equals(type) || "command".equals(type)
+                        || "decision".equals(type) || "reqstate".equals(type)) {
                     String[] p = data.split("\\|");
                     if (p.length > 1) state.put(type + ":" + p[1], json);
                 }
@@ -83,6 +91,8 @@ public class DashboardHub {
         try {
             HttpServer http = HttpServer.create(new InetSocketAddress(port), 0);
             http.createContext("/events", DashboardHub::events);
+            http.createContext("/api/pedestrian", ex -> api(ex, true));
+            http.createContext("/api/emergency", ex -> api(ex, false));
             http.createContext("/", DashboardHub::page);
             http.setExecutor(Executors.newCachedThreadPool(r -> {
                 Thread t = new Thread(r, "Dashboard-HTTP");
@@ -95,6 +105,85 @@ public class DashboardHub {
         } catch (Exception ex) {
             System.out.println("[DASHBOARD] Not started (" + ex.getMessage() + "). Traffic server is unaffected.");
         }
+    }
+
+    /** Pushes the current pending-request queues of one junction to all dashboards. */
+    public static void publishRequestState(TrafficStore store, String junctionId) {
+        publish("reqstate", store.requestSnapshot(junctionId));
+    }
+
+    /**
+     * POST /api/pedestrian  {"junction":"J01","direction":"NORTH","count":4}
+     * POST /api/emergency   {"junction":"J01","direction":"NORTH","vehicle":"AMBULANCE"}
+     * The request is handed to DashboardGateway, which queues it in the real TrafficStore.
+     */
+    private static void api(HttpExchange ex, boolean pedestrian) throws IOException {
+        try {
+            if (!"POST".equals(ex.getRequestMethod())) {
+                ex.getResponseHeaders().set("Allow", "POST");
+                json(ex, 405, false, "METHOD", "Use POST", 0L);
+                return;
+            }
+            // Cheap CSRF protection: JSON content type (needs a CORS preflight cross-site)
+            // and, when the browser sends an Origin, it must match this server's Host.
+            String ctype = ex.getRequestHeaders().getFirst("Content-Type");
+            if (ctype == null || !ctype.toLowerCase().startsWith("application/json")) {
+                json(ex, 415, false, "INVALID", "Content-Type must be application/json", 0L);
+                return;
+            }
+            String origin = ex.getRequestHeaders().getFirst("Origin");
+            String host = ex.getRequestHeaders().getFirst("Host");
+            if (origin != null && host != null && !origin.toLowerCase().endsWith("//" + host.toLowerCase())) {
+                json(ex, 403, false, "FORBIDDEN", "Cross-origin requests are not allowed", 0L);
+                return;
+            }
+            byte[] raw = readBody(ex, 1024);
+            if (raw == null) {
+                json(ex, 413, false, "INVALID", "Request body too large", 0L);
+                return;
+            }
+            String body = new String(raw, StandardCharsets.UTF_8);
+            DashboardGateway.Result r;
+            if (pedestrian) {
+                r = DashboardGateway.submitPedestrian(field(body, "junction"),
+                        field(body, "direction"), field(body, "count"));
+            } else {
+                r = DashboardGateway.submitEmergency(field(body, "junction"),
+                        field(body, "direction"), field(body, "vehicle"));
+            }
+            json(ex, r.status, r.ok, r.code, r.message, r.id);
+        } catch (Exception e) {
+            json(ex, 500, false, "ERROR", "Server error: " + e.getMessage(), 0L);
+        }
+    }
+
+    private static byte[] readBody(HttpExchange ex, int max) throws IOException {
+        java.io.InputStream in = ex.getRequestBody();
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        byte[] chunk = new byte[256];
+        int n;
+        while ((n = in.read(chunk)) != -1) {
+            buf.write(chunk, 0, n);
+            if (buf.size() > max) return null;
+        }
+        return buf.toByteArray();
+    }
+
+    /** Minimal flat-JSON string/number field reader (no external library needed). */
+    private static String field(String body, String name) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(
+                "\"" + name + "\"\\s*:\\s*(?:\"([^\"]*)\"|(-?\\d+))").matcher(body);
+        if (!m.find()) return null;
+        return m.group(1) != null ? m.group(1) : m.group(2);
+    }
+
+    private static void json(HttpExchange ex, int status, boolean ok, String code, String message, long id) throws IOException {
+        byte[] body = ("{\"ok\":" + ok + ",\"code\":\"" + esc(code) + "\",\"message\":\""
+                + esc(message == null ? "" : message) + "\",\"id\":" + id + "}").getBytes(StandardCharsets.UTF_8);
+        ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
+        ex.getResponseHeaders().set("Cache-Control", "no-store");
+        ex.sendResponseHeaders(status, body.length);
+        try (OutputStream os = ex.getResponseBody()) { os.write(body); }
     }
 
     private static void page(HttpExchange ex) throws IOException {

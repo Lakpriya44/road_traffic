@@ -15,6 +15,7 @@ public class TrafficController {
             String avoidDirection) {
         String[] directions = {"NORTH", "EAST", "SOUTH", "WEST"};
         double[] scores = new double[directions.length];
+        double[] penalties = new double[directions.length];
         int bestIndex = 0;
 
         for (int i = 0; i < directions.length; i++) {
@@ -26,8 +27,9 @@ public class TrafficController {
             int downstreamQueue = getDownstreamQueue(
                     update.getJunctionId(), directions[i], store);
             if (downstreamQueue > CONGESTION_THRESHOLD) {
-                score -= Math.min(20.0,
+                penalties[i] = Math.min(20.0,
                         (downstreamQueue - CONGESTION_THRESHOLD) * 0.8);
+                score -= penalties[i];
             }
             scores[i] = score;
             if (score > scores[bestIndex] || i == 0) bestIndex = i;
@@ -35,13 +37,18 @@ public class TrafficController {
 
         // Simple anti-starvation rule: after two consecutive selections,
         // prefer the best other approach when it has some demand.
+        int naturalBest = bestIndex;
+        boolean antiStarvation = false;
         if (avoidDirection != null && directions[bestIndex].equals(avoidDirection)) {
             int alternative = -1;
             for (int i = 0; i < directions.length; i++) {
                 if (directions[i].equals(avoidDirection)) continue;
                 if (alternative < 0 || scores[i] > scores[alternative]) alternative = i;
             }
-            if (alternative >= 0 && scores[alternative] > 0) bestIndex = alternative;
+            if (alternative >= 0 && scores[alternative] > 0) {
+                bestIndex = alternative;
+                antiStarvation = true;
+            }
         }
 
         String bestDirection = directions[bestIndex];
@@ -54,9 +61,49 @@ public class TrafficController {
                 + " score=" + String.format("%.1f", bestScore)
                 + " green=" + duration + "s");
 
+        publishDecision(update.getJunctionId(), directions, scores, penalties,
+                naturalBest, bestIndex, antiStarvation, avoidDirection, duration);
+
         return new SignalCommand(update.getJunctionId(), "VEHICLE",
                 bestDirection, duration, "NORMAL", "NONE",
                 System.currentTimeMillis());
+    }
+
+    /**
+     * Dashboard-only description of the decision just taken (does not affect control).
+     * DECISION|J01|NORMAL|NORTH|score|green|antiStarvation(0/1)|N:score:penalty;E:..;S:..;W:..|reason
+     */
+    private void publishDecision(String id, String[] dirs, double[] scores, double[] penalties,
+            int natural, int chosen, boolean antiStarvation, String avoid, int duration) {
+        StringBuilder table = new StringBuilder();
+        for (int i = 0; i < dirs.length; i++) {
+            if (i > 0) table.append(';');
+            table.append(dirs[i].charAt(0)).append(':')
+                    .append(String.format("%.1f", scores[i])).append(':')
+                    .append(String.format("%.1f", penalties[i]));
+        }
+        StringBuilder why = new StringBuilder();
+        if (antiStarvation) {
+            why.append(dirs[natural]).append(" had the highest score but was already served twice in a row, ")
+                    .append("so the anti-starvation rule chose ").append(dirs[chosen])
+                    .append(" (next best demand).");
+        } else {
+            int runnerUp = -1;
+            for (int i = 0; i < dirs.length; i++) {
+                if (i != chosen && (runnerUp < 0 || scores[i] > scores[runnerUp])) runnerUp = i;
+            }
+            why.append(dirs[chosen]).append(" has the highest adjusted demand score (")
+                    .append(String.format("%.1f", scores[chosen])).append(" vs ")
+                    .append(dirs[runnerUp]).append(' ').append(String.format("%.1f", scores[runnerUp]))
+                    .append(").");
+        }
+        if (penalties[chosen] > 0) {
+            why.append(" A downstream congestion penalty of -")
+                    .append(String.format("%.1f", penalties[chosen])).append(" was applied.");
+        }
+        DashboardHub.publish("decision", "DECISION|" + id + "|NORMAL|" + dirs[chosen] + "|"
+                + String.format("%.1f", scores[chosen]) + "|" + duration + "|"
+                + (antiStarvation ? 1 : 0) + "|" + table + "|" + why);
     }
 
     private int getDownstreamQueue(String junctionId, String direction, TrafficStore store) {

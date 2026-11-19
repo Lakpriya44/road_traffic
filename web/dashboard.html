@@ -1,84 +1,509 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SmartGrid Control Room</title>
 <style>
-:root{--bg:#16202b;--panel:#1f2c3a;--line:#31445a;--ink:#e8eef5;--mute:#8fa3b8;--udp:#4aa3ff;--tcp:#f2b84b;--red:#ef4b4b;--amber:#f5b82e;--green:#33d17a;--road:#2a3a4c}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "Bahnschrift","DIN Alternate","Segoe UI",system-ui,sans-serif}
-header{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;padding:14px 22px;border-bottom:1px solid var(--line)}
-h1{font-size:22px;margin:0;font-weight:600;letter-spacing:.3px}header p{margin:0;color:var(--mute);max-width:46ch}
-.live{display:flex;align-items:center;gap:8px;margin-left:auto;color:var(--mute)}.dot{width:11px;height:11px;border-radius:50%;background:var(--red)}.live.on .dot{background:var(--green);animation:p 1.6s infinite}
-@keyframes p{50%{opacity:.35}}
-.stats{display:flex;gap:22px}.stat b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.stat span{color:var(--mute);font-size:13px}
-main{padding:18px 22px;display:grid;gap:18px}
-.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
-.card.off{opacity:.55}.ch{display:flex;justify-content:space-between;align-items:center}.ch h2{margin:0;font-size:19px}
-.chip{font-size:13px;padding:2px 10px;border-radius:99px;background:#3a2b2b;color:#ff9b9b}.on .chip{background:#1d3a2c;color:#7ee2a8}
-svg{width:100%;max-width:300px;display:block;margin:6px auto}
-.ph{min-height:54px}.ph b{font-size:17px}.bar{height:7px;background:#2c3d50;border-radius:4px;margin:6px 0;overflow:hidden}.bar i{display:block;height:100%;background:var(--green);width:0}
-.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:4px;margin-left:6px;font-weight:600}.em{background:var(--red);color:#fff;animation:p 1s infinite}.pd{background:#6d8cff;color:#fff}
-table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}th,td{padding:3px 4px;text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:500}tr.hl td{color:var(--green);font-weight:600}
-.two{display:grid;grid-template-columns:2fr 1fr;gap:18px}@media(max-width:900px){.two{grid-template-columns:1fr}}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}.panel h3{margin:0 0 8px;font-size:16px}
-.tabs{display:flex;gap:6px;margin-bottom:8px}.tabs button{background:none;border:1px solid var(--line);color:var(--mute);padding:3px 12px;border-radius:99px;cursor:pointer;font:inherit;font-size:13px}.tabs button.a{background:var(--ink);color:var(--bg)}
-button:focus-visible{outline:2px solid var(--udp)}
-#log{height:260px;overflow:auto;font:13px/1.55 Consolas,"Courier New",monospace}#log div{border-bottom:1px solid #263648;padding:1px 0;white-space:pre-wrap}
-.k{display:inline-block;width:46px;font-weight:700}.k.udp{color:var(--udp)}.k.tcp{color:var(--tcp)}.k.req{color:#c79bff}.k.sys{color:var(--mute)}.t{color:var(--mute);margin-right:8px}
-.how ol{margin:0;padding-left:20px}.how li{margin-bottom:6px}.u{color:var(--udp)}.c{color:var(--tcp)}
-@media(prefers-reduced-motion:reduce){*{animation:none!important}}
-</style></head><body>
-<header><div><h1>SmartGrid Control Room</h1><p>Three junctions send traffic to one server. The server decides who gets the green light.</p></div>
-<div class="stats"><div class="stat"><b id="sU">0</b><span>traffic snapshots (UDP)</span></div><div class="stat"><b id="sC">0</b><span>signal commands (TCP)</span></div><div class="stat"><b id="sP">0</b><span>pedestrian requests</span></div><div class="stat"><b id="sE">0</b><span>emergency requests</span></div></div>
-<div class="live" id="live"><i class="dot"></i><span id="liveT">Connecting to server...</span></div></header>
-<main><div class="cards" id="cards"></div>
-<div class="two"><div class="panel"><h3>What is happening on the network</h3>
-<div class="tabs" id="tabs"><button class="a" data-v="net">Network</button><button data-v="req">Requests</button><button data-v="raw">Server console</button></div><div id="log" aria-live="off"></div></div>
-<div class="panel how"><h3>How the server decides</h3><ol>
-<li>Each junction sends its queue every 3 s by <b class="u">UDP</b>. A lost packet does not matter, the next one replaces it.</li>
-<li>The server gives every approach a demand score: vehicles + 2 x queue + waiting time / 10.</li>
-<li>If the next junction is already jammed (over 20 queued), the score drops, so we do not push more cars into it.</li>
-<li>The highest score gets green for 8 to 25 s. Commands travel by <b class="c">TCP</b> so they are never lost.</li>
-<li>Emergency vehicles go first, then pedestrians, then normal traffic.</li></ol></div></div></main>
+:root{
+  --bg:#050d19;--bg2:#08121f;--panel:#0b1a2d;--panel2:#0f2239;--line:#1b3452;--line2:#26466b;
+  --txt:#dce8f6;--dim:#8aa3c0;--mute:#5d7899;--cyan:#38bdf8;--green:#34d399;--amber:#fbbf24;--red:#f87171;--violet:#a78bfa;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.45 "Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif}
+body{background:radial-gradient(1200px 500px at 20% -10%,#0d2745 0,transparent 60%),var(--bg);min-height:100vh}
+header{display:flex;flex-wrap:wrap;gap:14px;align-items:center;padding:14px 22px;border-bottom:1px solid var(--line);background:rgba(8,18,31,.85);backdrop-filter:blur(6px);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.logo{width:42px;height:42px;border-radius:12px;background:var(--panel2);border:1px solid var(--line2);display:grid;place-items:center}
+.brand h1{margin:0;font-size:20px;letter-spacing:.06em}
+.brand small{color:var(--dim);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase}
+.tiles{display:flex;gap:10px;flex-wrap:wrap}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 14px;min-width:104px}
+.tile b{display:block;font-size:21px;line-height:1.15}
+.tile span{font-size:11px;color:var(--dim)}
+.live{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--dim)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 8px currentColor;color:var(--red)}
+.dot.ok{background:var(--green);color:var(--green)}
+main{padding:16px 22px 40px;display:grid;gap:16px;max-width:1900px;margin:auto}
+.panel{background:linear-gradient(180deg,var(--panel),#091523);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.ph{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line)}
+.ph h2{margin:0;font-size:14px;letter-spacing:.09em;text-transform:uppercase}
+.ph small{color:var(--dim);font-size:12px}
+.pb{padding:14px 18px}
+.mapwrap{overflow-x:auto;background:var(--bg2)}
+#map{display:block;width:100%;min-width:900px;height:auto}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;padding:10px 18px;color:var(--dim);font-size:12px;border-top:1px solid var(--line)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.simnote{margin:0 18px 12px;padding:8px 12px;border:1px dashed var(--line2);border-radius:10px;color:var(--dim);font-size:12px}
+.simnote b{color:var(--amber)}
+.row2{display:grid;grid-template-columns:minmax(300px,1fr) minmax(340px,1.1fr) minmax(320px,1fr);gap:16px}
+@media(max-width:1250px){.row2{grid-template-columns:1fr 1fr}.row2>:last-child{grid-column:1/-1}}
+@media(max-width:800px){.row2{grid-template-columns:1fr}header{position:static}}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px}
+@media(max-width:480px){.cards{grid-template-columns:1fr}}
+.road{fill:#1c2836}.box{fill:#223244}.kerb{stroke:#7b8ca3;stroke-width:2;opacity:.8}
+.cl{stroke:#e6b422;stroke-width:2}.stop{fill:#f1f5f9}.zb{fill:#e8eef6;opacity:.9}.arrow{fill:#cbd5e1;opacity:.5}
+.cwglow{fill:transparent;transition:fill .3s}.cwglow.pend{fill:rgba(251,191,36,.22)}.cwglow.walk{fill:rgba(52,211,153,.35);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.45}}
+.vlabel{fill:#a9bdd6;font-size:13px;font-weight:600;letter-spacing:.04em}
+.road-label{fill:#5d7899;font-size:15px;font-weight:700;letter-spacing:.14em}
+.jname{fill:#e8f1fb;font-size:22px;font-weight:800;text-anchor:middle}
+.jmode{fill:#8aa3c0;font-size:11px;text-anchor:middle;font-weight:600}
+.jbox{fill:none;stroke:#e6b422;stroke-width:1.5;opacity:.75;rx:12}
+.house{fill:#0b1320;stroke:#51647d;stroke-width:1.5}
+.lamp{fill:#1b2535}.lamp.r.on{fill:#ff4b5c;filter:drop-shadow(0 0 5px #ff4b5c)}.lamp.y.on{fill:#ffc531;filter:drop-shadow(0 0 5px #ffc531)}.lamp.g.on{fill:#2ee59d;filter:drop-shadow(0 0 5px #2ee59d)}
+.pole{stroke:#51647d;stroke-width:2.5}
+.stag{fill:#e8f1fb;font-size:11px;font-weight:800;text-anchor:middle}
+.off{fill:rgba(5,13,25,.82)}.offt{fill:#f87171;font-size:13px;font-weight:800;text-anchor:middle}
+.pedicon{stroke:#7b8ca3;fill:none;stroke-width:1.6;stroke-linecap:round;opacity:.65}
+.pedicon.pend{stroke:#fbbf24;opacity:1}
+.badge{fill:#fbbf24;font-size:11px;font-weight:800;text-anchor:middle}
+.walker{fill:#fde68a;stroke:#78350f;stroke-width:.6}
+.wtag{fill:#34d399;font-size:11px;font-weight:800;text-anchor:middle}
+.veh .win{fill:#10202f;opacity:.85}.veh .hl{fill:#fff3b0}.veh .brk{fill:#5b1a1a}.veh.stop .brk{fill:#ff3b3b}
+.fl1,.fl2{animation:fl .5s infinite steps(1)}.fl2{animation-delay:.25s}
+@keyframes fl{0%{fill:#ff2d2d}50%{fill:#2d6bff}}
+.mode{display:inline-block;padding:2px 10px;border-radius:99px;font-size:11px;font-weight:800;letter-spacing:.08em}
+.mode.NORMAL{background:#10324f;color:var(--cyan)}.mode.EMERGENCY{background:#4a1519;color:var(--red)}.mode.PEDESTRIAN{background:#4a3a0f;color:var(--amber)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin:8px 0}.kv dt{color:var(--dim);font-size:12px}.kv dd{margin:0;font-weight:600}
+.reason{background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;color:#c3d4e8;font-size:13px;margin:10px 0}
+.bars{display:grid;gap:5px;margin-top:6px}.bar{display:grid;grid-template-columns:58px 1fr 92px;gap:8px;align-items:center;font-size:12px}
+.bar .t{height:9px;background:#0a1626;border-radius:6px;overflow:hidden}.bar .t i{display:block;height:100%;background:#2b6a99}
+.bar.sel .t i{background:var(--green)}.bar.sel b{color:var(--green)}.pen{color:var(--amber)}
+.tabs{display:flex;gap:6px;flex-wrap:wrap}.tab{background:var(--panel2);border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer}
+.tab.active{color:#fff;border-color:var(--cyan);background:#0f3050}
+form{display:grid;gap:8px;margin-bottom:14px}
+.fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+@media(max-width:560px){.fgrid{grid-template-columns:1fr 1fr}}
+label{display:grid;gap:3px;font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+select,input{background:#071322;border:1px solid var(--line2);color:var(--txt);border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;width:100%}
+select:focus,input:focus,button:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+button.send{background:#0f4a78;border:1px solid var(--cyan);color:#fff;font-weight:700;border-radius:8px;padding:8px 14px;cursor:pointer}
+button.send.emg{background:#6b1a22;border-color:var(--red)}button.send:disabled{opacity:.55;cursor:wait}
+.fmsg{min-height:18px;font-size:12.5px}.fmsg.ok{color:var(--green)}.fmsg.err{color:var(--red)}
+h3{margin:2px 0 8px;font-size:12px;letter-spacing:.09em;color:var(--dim);text-transform:uppercase}
+.reqs{display:grid;gap:5px;font-size:12.5px}.req{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.st{font-weight:800;font-size:11px;padding:1px 8px;border-radius:99px}.st.QUEUED{background:#4a3a0f;color:var(--amber)}.st.SERVED,.st.ACTIVE{background:#0f3d2e;color:var(--green)}.st.COMPLETED{background:#1b2a3d;color:var(--dim)}.st.EXPIRED,.st.CANCELLED{background:#4a1519;color:var(--red)}
+.logs{height:360px;overflow:auto;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:6px;font:12px/1.5 ui-monospace,Consolas,monospace}
+.ll{display:flex;gap:7px;padding:1px 3px;border-bottom:1px solid #0d1c30}.lt{color:var(--mute);white-space:nowrap}.lk{min-width:44px;text-align:center;border-radius:4px;font-size:10px;font-weight:800;padding:0 4px;height:16px;line-height:16px;margin-top:2px}
+.lk.udp{background:#123a5c;color:#7cc4f5}.lk.tcp{background:#12423a;color:#6ee7b7}.lk.req{background:#4a3a0f;color:#fbbf24}.lk.ack{background:#2a1f4d;color:#c4b5fd}.lk.sys{background:#2a3446;color:#aab9cc}.lk.raw{background:#1b2230;color:#7b8ca3}.lk.err{background:#4a1519;color:#f87171}
+.lx.err{color:#fca5a5}
+.jc h2{display:flex;gap:10px;align-items:center}.pill{font-size:11px;font-weight:800;padding:2px 10px;border-radius:99px;margin-left:auto}.pill.on{background:#0f3d2e;color:var(--green);border:1px solid #1d7a5b}.pill.offl{background:#4a1519;color:var(--red);border:1px solid #8b2a33}
+table{border-collapse:collapse;width:100%;font-size:12.5px}th{color:var(--dim);font-weight:600;font-size:11px;text-align:right;padding:4px 6px;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}
+td{text-align:right;padding:5px 6px;border-bottom:1px solid #0f2036;font-variant-numeric:tabular-nums}
+tr.sel td{background:rgba(52,211,153,.12)}tr.sel td:first-child{box-shadow:inset 3px 0 var(--green);font-weight:800}
+.sg{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;background:#27364b}.sg.G{background:var(--green)}.sg.Y{background:var(--amber)}.sg.R{background:var(--red)}
+.cstat{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;margin-bottom:10px;font-size:12.5px}.cstat span{color:var(--dim)}.cstat b{font-weight:700}
+.hint{color:var(--mute);padding:8px;font-size:12.5px}
+.note{color:var(--mute);font-size:11.5px;margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo"><svg width="22" height="30" viewBox="0 0 22 30" aria-hidden="true"><rect x="3" y="1" width="16" height="28" rx="6" fill="#0b1320" stroke="#51647d" stroke-width="1.5"/><circle cx="11" cy="8" r="3.6" fill="#ff4b5c"/><circle cx="11" cy="15" r="3.6" fill="#3a3320"/><circle cx="11" cy="22" r="3.6" fill="#2ee59d"/></svg></div>
+    <div><h1>SMARTGRID CONTROL ROOM</h1><small>Central traffic management · J01 — J02 — J03 corridor</small></div>
+  </div>
+  <div class="tiles">
+    <div class="tile"><b id="cOnline">0/3</b><span>Junctions online</span></div>
+    <div class="tile"><b id="cUdp">0</b><span>Traffic snapshots · UDP</span></div>
+    <div class="tile"><b id="cTcp">0</b><span>Signal commands · TCP</span></div>
+    <div class="tile"><b id="cPed">0</b><span>Pedestrian requests</span></div>
+    <div class="tile"><b id="cEmg">0</b><span>Emergency requests</span></div>
+  </div>
+  <div class="live"><span class="dot" id="liveDot"></span><span id="liveTxt">Connecting to event feed…</span></div>
+</header>
+<main>
+  <section class="panel">
+    <div class="ph"><h2>Connected road corridor</h2><small>Sri Lankan left-hand traffic · Eastbound on the upper (north) side · Westbound on the lower (south) side · <span id="mapConn">0 of 3 junctions connected</span></small></div>
+    <div class="mapwrap"><svg id="map" viewBox="0 0 1600 640" role="img" aria-label="Three connected four-way junctions J01, J02 and J03 on one east-west road"></svg></div>
+    <div class="legend">
+      <span><i style="background:#2ee59d"></i>Green · vehicles moving</span><span><i style="background:#ffc531"></i>Yellow · clearance</span><span><i style="background:#ff4b5c"></i>Red · stop</span>
+      <span><i style="background:#fbbf24"></i>Pedestrians waiting</span><span><i style="background:#34d399"></i>Pedestrian phase (WALK)</span><span><i style="background:#f87171"></i>Emergency vehicle</span>
+      <span>Letter on each signal head = the approach it controls</span>
+    </div>
+    <div class="simnote"><b>Live backend data:</b> signal lamps (TCP commands), counts, queues, waiting times, requests. <b>Visual simulation:</b> the backend does not track individual cars. Cars are drawn to match each approach's reported queue (as many as fit on the road) and its LEFT / STRAIGHT / RIGHT mix; the numbers in the labels and panels are the real values.</div>
+  </section>
+
+  <div class="row2">
+    <section class="panel">
+      <div class="ph"><h2>Central server decision</h2><div class="tabs" id="decTabs"></div></div>
+      <div class="pb" id="decision"><div class="hint">Waiting for the first decision from the server…</div></div>
+    </section>
+    <section class="panel">
+      <div class="ph"><h2>Pedestrian &amp; emergency requests</h2><small>Sent to the Java server over HTTP</small></div>
+      <div class="pb">
+        <h3>Pedestrian crossing request</h3>
+        <form id="pedForm" novalidate>
+          <div class="fgrid">
+            <label>Junction<select id="pedJ"><option>J01</option><option>J02</option><option>J03</option></select></label>
+            <label>Crossing<select id="pedD"><option>NORTH</option><option>EAST</option><option>SOUTH</option><option>WEST</option></select></label>
+            <label>Waiting<input id="pedC" type="number" min="1" max="10000" step="1" value="4"></label>
+          </div>
+          <button class="send" id="pedBtn" type="submit">Send pedestrian request</button><div class="fmsg" id="pedMsg" aria-live="polite"></div>
+        </form>
+        <h3>Emergency vehicle request</h3>
+        <form id="emgForm" novalidate>
+          <div class="fgrid">
+            <label>Junction<select id="emgJ"><option>J01</option><option>J02</option><option>J03</option></select></label>
+            <label>Arrives from<select id="emgD"><option>NORTH</option><option>EAST</option><option>SOUTH</option><option>WEST</option></select></label>
+            <label>Vehicle<select id="emgV"><option>AMBULANCE</option><option>FIRE_TRUCK</option><option>POLICE</option></select></label>
+          </div>
+          <button class="send emg" id="emgBtn" type="submit">Send emergency request</button><div class="fmsg" id="emgMsg" aria-live="polite"></div>
+        </form>
+        <h3>Request status</h3><div class="reqs" id="reqList"><div class="hint">No requests sent from this dashboard yet.</div></div>
+        <div class="note">A request is queued only when the server accepts it. It is served at the next phase boundary (emergency first, then pedestrian, then normal traffic).</div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="ph"><h2>Live network activity</h2><div class="tabs" id="logTabs"><span class="tab active" data-v="net">Network</span><span class="tab" data-v="req">Requests &amp; ACKs</span><span class="tab" data-v="raw">Server console</span></div></div>
+      <div class="pb"><div class="logs" id="logList"></div></div>
+    </section>
+  </div>
+
+  <section class="cards" id="cards"></section>
+</main>
 <script>
-const D=['NORTH','EAST','SOUTH','WEST'],JS=['J01','J02','J03'],NEXT={J01:{WEST:['J02','WEST']},J02:{WEST:['J03','WEST'],EAST:['J01','EAST']},J03:{EAST:['J02','EAST']}};
-const J={},cnt={u:0,c:0,p:0,e:0},logs=[];let off=0,view='net';
-const cards=document.getElementById('cards');
-JS.forEach(id=>{J[id]={conn:false,tr:null,cmd:null};const d=document.createElement('div');d.className='card off';d.id='c'+id;
-d.innerHTML=`<div class="ch"><h2>Junction ${id}</h2><span class="chip">offline</span></div>
-<svg viewBox="0 0 240 240" role="img" aria-label="Junction ${id}"><rect x="95" y="0" width="50" height="240" fill="var(--road)"/><rect x="0" y="95" width="240" height="50" fill="var(--road)"/><rect x="95" y="95" width="50" height="50" fill="#33475c"/>
-<rect id="${id}qN" x="100" y="90" width="18" height="0" fill="var(--tcp)" rx="2"/><rect id="${id}qE" x="150" y="100" width="0" height="18" fill="var(--tcp)" rx="2"/><rect id="${id}qS" x="122" y="150" width="18" height="0" fill="var(--tcp)" rx="2"/><rect id="${id}qW" x="90" y="122" width="0" height="18" fill="var(--tcp)" rx="2"/>
-<circle id="${id}lN" cx="86" cy="86" r="9"/><circle id="${id}lE" cx="154" cy="86" r="9"/><circle id="${id}lS" cx="154" cy="154" r="9"/><circle id="${id}lW" cx="86" cy="154" r="9"/>
-<g fill="var(--ink)" font-size="13" font-weight="600"><text x="120" y="14" text-anchor="middle">N</text><text x="120" y="234" text-anchor="middle">S</text><text x="232" y="90" text-anchor="end">E</text><text x="8" y="164">W</text></g></svg>
-<div class="ph" id="${id}ph"></div>
-<table><tr><th>Approach</th><th>Queue</th><th>Wait s</th><th>Demand</th></tr>${D.map(x=>`<tr id="${id}r${x[0]}"><td>${x[0]+x.slice(1).toLowerCase()}</td><td>-</td><td>-</td><td>-</td></tr>`).join('')}</table>`;cards.appendChild(d)});
-const now=()=>Date.now()+off,$=id=>document.getElementById(id),hm=t=>new Date(t).toTimeString().slice(0,8);
-function parse(p){const o={};p.slice(3).forEach(s=>{const a=s.split(',');o[a[0]]={v:+a[1]+ +a[2]+ +a[3],q:+a[4],w:+a[5]}});return o}
-function score(id,x){const a=J[id].tr[x];if(!a)return 0;let s=a.v+2*a.q+a.w/10,n=(NEXT[id]||{})[x];if(n&&J[n[0]].tr&&J[n[0]].tr[n[1]]){const q=J[n[0]].tr[n[1]].q;if(q>20)s-=Math.min(20,(q-20)*.8)}return s}
-function add(k,t,text,ts){logs.unshift({k,t,text,ts});if(logs.length>300)logs.pop();draw()}
-function draw(){const want={net:['udp','tcp','sys'],req:['req'],raw:['raw']}[view];$('log').innerHTML=logs.filter(l=>want.includes(l.k)).slice(0,80).map(l=>`<div><span class="t">${hm(l.ts)}</span>${l.k==='raw'?'':`<span class="k ${l.k}">${l.k.toUpperCase()}</span>`}${l.text.replace(/</g,'&lt;')}</div>`).join('')}
-document.getElementById('tabs').onclick=e=>{if(e.target.dataset.v){view=e.target.dataset.v;[...e.currentTarget.children].forEach(b=>b.classList.toggle('a',b===e.target));draw()}};
-function handle(e){const d=e.d,p=d.split('|');
-if(e.t==='hello'){off=e.ts-Date.now();const c=p.map(Number);cnt.u=c[0];cnt.c=c[1];cnt.p=c[2];cnt.e=c[3];return}
-if(e.t==='join'){J[d].conn=true;add('sys',e.ts,d+' connected to the server (TCP)')}
-else if(e.t==='leave'){J[d].conn=false;J[d].cmd=null;J[d].tr=null;add('sys',e.ts,d+' disconnected')}
-else if(e.t==='traffic'){J[p[1]].tr=parse(p);if(!e.r)cnt.u++;add('udp',e.ts,`${p[1]} -> server  queues N${J[p[1]].tr.NORTH.q} E${J[p[1]].tr.EAST.q} S${J[p[1]].tr.SOUTH.q} W${J[p[1]].tr.WEST.q}`)}
-else if(e.t==='command'){J[p[1]].cmd={ph:p[2],dir:p[3],dur:+p[4],mode:p[5],veh:p[6],ts:e.ts};if(!e.r)cnt.c++;add('tcp',e.ts,`server -> ${p[1]}  ${p[2]==='PEDESTRIAN'?'WALK':'GREEN'} ${p[3]} for ${p[4]} s`+(p[5]==='EMERGENCY'?'  EMERGENCY '+p[6]:''))}
-else if(e.t==='ped'){if(!e.r)cnt.p++;add('req',e.ts,`${p[1]} asks to let ${p[3]} pedestrian(s) cross at ${p[2]}`)}
-else if(e.t==='emerg'){if(!e.r)cnt.e++;add('req',e.ts,`${p[1]} reports ${p[3]} arriving from ${p[2]}`)}
-else if(e.t==='log')add('raw',e.ts,d)}
-function frame(){$('sU').textContent=cnt.u;$('sC').textContent=cnt.c;$('sP').textContent=cnt.p;$('sE').textContent=cnt.e;
-JS.forEach(id=>{const j=J[id],c=$('c'+id);c.className='card '+(j.conn?'on':'off');c.querySelector('.chip').textContent=j.conn?'connected':'offline';
-let st={},go=null,h='<b>Waiting for data</b>';const cm=j.cmd;
-if(j.conn&&cm){const el=(now()-cm.ts)/1000;if(el<cm.dur+2){if(el<1){D.forEach(x=>st[x]='Y');h='<b>Changing: yellow</b>'}else if(el<2){D.forEach(x=>st[x]='R');h='<b>All red: clearing the junction</b>'}
-else{const left=Math.max(0,cm.dur+2-el);go=cm.dir;if(cm.ph==='PEDESTRIAN'){h=`<b>Pedestrians crossing at ${cm.dir}</b><span class="tag pd">WALK</span>`}else{st[cm.dir]='G';h=`<b>Green: ${cm.dir}</b> ${Math.ceil(left)} s left`+(cm.mode==='EMERGENCY'?`<span class="tag em">EMERGENCY ${cm.veh}</span>`:'')}
-h+=`<div class="bar"><i style="width:${(left/cm.dur*100).toFixed(0)}%"></i></div>`}}else h='<b>Phase finished</b> next command coming'}
-else if(j.conn)h='<b>Connected</b> waiting for the first decision';
-D.forEach(x=>{const n=x[0],col={G:'var(--green)',Y:'var(--amber)'}[st[x]]||'var(--red)',l=$(id+'l'+n);l.setAttribute('fill',col);l.style.filter=st[x]==='G'?'drop-shadow(0 0 6px var(--green))':'none';
-const a=j.tr&&j.tr[x],q=a?Math.min(a.q,40)/40*78:0,r=$(id+'q'+n);if(n==='N'||n==='S')r.setAttribute('height',q);else r.setAttribute('width',q);if(n==='N')r.setAttribute('y',90-q);if(n==='W')r.setAttribute('x',90-q);
-const row=$(id+'r'+n);if(a){const raw=a.v+2*a.q+a.w/10,s=score(id,x),pen=raw-s>.05?` (-${(raw-s).toFixed(0)})`:'';row.children[1].textContent=a.q;row.children[2].textContent=a.w;row.children[3].textContent=s.toFixed(0)+pen}
-row.className=(st[x]==='G'||(cm&&go===x&&j.cmd&&cm.ph==='PEDESTRIAN'))?'hl':''});
-$(id+'ph').innerHTML=h});}
-setInterval(frame,200);
-const es=new EventSource('events');es.onmessage=m=>handle(JSON.parse(m.data));
-es.onopen=()=>{$('live').className='live on';$('liveT').textContent='Live: connected to server'};es.onerror=()=>{$('live').className='live';$('liveT').textContent='Server not reachable, retrying...'};
-</script></body></html>
+'use strict';
+/* ======================================================================
+   SmartGrid dashboard. Data source: EventSource('events') (unchanged JSON
+   format {t,d,ts[,r]}) plus new event types decision / reqstate / ack.
+   Requests are POSTed to /api/pedestrian and /api/emergency.
+   ====================================================================== */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const SVGNS='http://www.w3.org/2000/svg';
+const J=['J01','J02','J03'],DIRS=['NORTH','EAST','SOUTH','WEST'];
+
+/* ---------- geometry (viewBox 1600 x 640) ---------- */
+const W=1600,HT=640,CY=320,H=42,LN=22,CROSS=24,STOP_D=28,XC={J01:300,J02:800,J03:1300};
+/* Left-hand traffic: lane centre is LN from the road axis, on the driver's LEFT.
+   Eastbound = north half, westbound = south half, southbound = east half, northbound = west half. */
+const ROUTE={NORTH:{L:'E',S:'S',R:'W'},EAST:{L:'S',S:'W',R:'N'},SOUTH:{L:'W',S:'N',R:'E'},WEST:{L:'N',S:'E',R:'S'}};
+const NEXT={J01:{WEST:['J02','WEST']},J02:{WEST:['J03','WEST'],EAST:['J01','EAST']},J03:{EAST:['J02','EAST']}};
+const LEN=26,GAP=7,ACC=110,DEC=190,DW=130;
+const lanes={},stubs={};
+function mkLane(key,a,b,o){const dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy);return Object.assign({key,a,b,d:[dx/len,dy/len],len,vs:[],lastSpawn:-9,gap:1,target:0,seeded:false},o);}
+J.forEach((id,i)=>{const jx=XC[id];
+  lanes[id+'-NORTH']=mkLane(id+'-NORTH',[jx+LN,0],[jx+LN,CY-H],{type:'app',kind:'edge',J:id,dir:'NORTH'});
+  lanes[id+'-SOUTH']=mkLane(id+'-SOUTH',[jx-LN,HT],[jx-LN,CY+H],{type:'app',kind:'edge',J:id,dir:'SOUTH'});
+  lanes[id+'-WEST']=mkLane(id+'-WEST',i===0?[0,CY-LN]:[XC[J[i-1]]+H,CY-LN],[jx-H,CY-LN],{type:'app',kind:i===0?'edge':'link',J:id,dir:'WEST'});
+  lanes[id+'-EAST']=mkLane(id+'-EAST',i===2?[W,CY+LN]:[XC[J[i+1]]-H,CY+LN],[jx+H,CY+LN],{type:'app',kind:i===2?'edge':'link',J:id,dir:'EAST'});
+  stubs[id+'-N']=mkLane(id+'-N',[jx-LN,CY-H],[jx-LN,0],{type:'stub',J:id});
+  stubs[id+'-S']=mkLane(id+'-S',[jx+LN,CY+H],[jx+LN,HT],{type:'stub',J:id});
+  if(i===2)stubs[id+'-E']=mkLane(id+'-E',[jx+H,CY-LN],[W,CY-LN],{type:'stub',J:id});
+  if(i===0)stubs[id+'-W']=mkLane(id+'-W',[jx-H,CY+LN],[0,CY+LN],{type:'stub',J:id});
+});
+const appLanes=Object.values(lanes),allLanes=appLanes.concat(Object.values(stubs));
+appLanes.forEach(l=>{l.stopS=l.len-STOP_D;l.cap=Math.max(1,Math.min(8,Math.floor((l.stopS-12)/(LEN+GAP))));});
+function exitLane(id,out){const i=J.indexOf(id);
+  if(out==='E')return i<2?lanes[J[i+1]+'-WEST']:stubs[id+'-E'];
+  if(out==='W')return i>0?lanes[J[i-1]+'-EAST']:stubs[id+'-W'];
+  return stubs[id+'-'+out];}
+const connCache={};
+function conn(l,route){const k=l.key+route;if(connCache[k])return connCache[k];
+  const ex=exitLane(l.J,ROUTE[l.dir][route]),p0=l.b,p3=ex.a;
+  const dist=Math.hypot(p3[0]-p0[0],p3[1]-p0[1]);
+  const k2=route==='S'?dist/3:0.55*Math.max(Math.abs(p3[0]-p0[0]),Math.abs(p3[1]-p0[1]));
+  const p1=[p0[0]+l.d[0]*k2,p0[1]+l.d[1]*k2],p2=[p3[0]-ex.d[0]*k2,p3[1]-ex.d[1]*k2];
+  const pts=[],cum=[0],N=24;
+  for(let i=0;i<=N;i++){const t=i/N,u=1-t;pts.push([u*u*u*p0[0]+3*u*u*t*p1[0]+3*u*t*t*p2[0]+t*t*t*p3[0],u*u*u*p0[1]+3*u*u*t*p1[1]+3*u*t*t*p2[1]+t*t*t*p3[1]]);
+    if(i)cum.push(cum[i-1]+Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]));}
+  return connCache[k]={pts,cum,len:cum[N],exit:ex,route,lane:l};}
+function connPos(c,cs){cs=Math.max(0,Math.min(c.len,cs));let i=1;while(i<c.cum.length-1&&c.cum[i]<cs)i++;
+  const a=c.pts[i-1],b=c.pts[i],seg=c.cum[i]-c.cum[i-1]||1,t=(cs-c.cum[i-1])/seg;
+  return[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,Math.atan2(b[1]-a[1],b[0]-a[0])];}
+
+/* ---------- state ---------- */
+const state={};J.forEach(id=>state[id]={online:false,traffic:null,command:null,prev:null,decision:null,pendPed:[],pendEmg:[],lastServed:null});
+const counts={udp:0,tcp:0,ped:0,emerg:0};
+let clockOffset=0,nowFn=()=>Date.now()+clockOffset,logs=[],activeView='net',dirty=true,decTab='latest',lastDecisionJ=null;
+const myReqs=[];const mixes={},rel={},emgSeen=new Set(),emgQ=[];
+function timeText(ts){return new Date(ts||Date.now()).toLocaleTimeString([],{hour12:false});}
+function addLog(kind,text,ts,err){logs.unshift({kind,text,ts:ts||Date.now(),err});if(logs.length>300)logs.pop();dirty=true;}
+function parseTraffic(packet){const out={};packet.split('|').slice(3).forEach(part=>{const a=part.split(',');
+  if(a.length===6)out[a[0]]={left:+a[1],straight:+a[2],right:+a[3],vehicles:+a[1]+ +a[2]+ +a[3],queue:+a[4],wait:+a[5]};});return out;}
+function parseReq(s,isPed){return s?s.split(',').filter(Boolean).map(x=>{const a=x.split('*');return{dir:a[0],val:isPed?+a[1]:a[1],id:+a[2]};}):[];}
+/* same formula as TrafficController: vehicles + 2*queue + wait/10, minus the downstream congestion penalty */
+function demand(id,dir){const a=state[id].traffic&&state[id].traffic[dir];if(!a)return 0;
+  return Math.max(0,a.vehicles+2*a.queue+a.wait/10-downPen(id,dir));}
+function downPen(id,dir){const n=NEXT[id]&&NEXT[id][dir];if(!n)return 0;const q=state[n[0]].traffic&&state[n[0]].traffic[n[1]]&&state[n[0]].traffic[n[1]].queue;return q!=null&&q>20?Math.min(20,(q-20)*.8):0;}
+
+function handleEvent(e){
+  const d=e.d==null?'':String(e.d),p=d.split('|'),ts=e.ts||Date.now(),st=state[p[1]];
+  switch(e.t){
+  case 'hello':{clockOffset=ts-Date.now();const c=d.split('|').map(Number);if(c.length>=4){counts.udp=c[0]||0;counts.tcp=c[1]||0;counts.ped=c[2]||0;counts.emerg=c[3]||0;}break;}
+  case 'join':if(state[d]){state[d].online=true;}addLog('sys',d+' connected to the server (TCP)',ts);break;
+  case 'leave':if(state[d]){Object.assign(state[d],{online:false,traffic:null,command:null,prev:null,decision:null,pendPed:[],pendEmg:[]});}addLog('sys',d+' disconnected',ts);break;
+  case 'traffic':if(p.length>=7&&st){const tr=parseTraffic(d),old=st.traffic;
+      DIRS.forEach(dir=>{const a=tr[dir];if(!a)return;const k=p[1]+'-'+dir,m=mixes[k]||(mixes[k]={L:0,S:0,R:0});
+        m.L=m.L*.7+a.left;m.S=m.S*.7+a.straight;m.R=m.R*.7+a.right;
+        if(old&&old[dir]&&a.queue<old[dir].queue)rel[k]=0;rel[k]=Math.min(rel[k]||0,a.queue);});
+      st.traffic=tr;st.online=true;if(!e.r)counts.udp++;
+      addLog('udp',`${p[1]} → server · queues N${tr.NORTH?tr.NORTH.queue:'–'} E${tr.EAST?tr.EAST.queue:'–'} S${tr.SOUTH?tr.SOUTH.queue:'–'} W${tr.WEST?tr.WEST.queue:'–'}`,ts);}break;
+  case 'command':if(p.length>=8&&st){if(st.command&&st.command.ts<ts)st.prev=st.command;
+      st.command={junction:p[1],phase:p[2],direction:p[3],duration:+p[4],mode:p[5],vehicle:p[6],ts};if(!e.r)counts.tcp++;
+      addLog('tcp',`server → ${p[1]} · ${p[2]==='PEDESTRIAN'?'WALK '+p[3]:'GREEN '+p[3]} · ${p[4]} s${p[5]==='EMERGENCY'?' · EMERGENCY '+p[6]:''}`,ts);}break;
+  case 'decision':if(st&&p.length>=9){const table={};p[7].split(';').filter(Boolean).forEach(x=>{const a=x.split(':');table[a[0]]={score:+a[1],pen:+a[2]};});
+      st.decision={mode:p[2],dir:p[3],score:+p[4],green:+p[5],anti:p[6]==='1',table,reason:p.slice(8).join('|'),ts};lastDecisionJ=p[1];}break;
+  case 'reqstate':if(st){const np=parseReq(p[2],true),ne=parseReq(p[3],false);
+      const gone=st.pendPed.find(x=>!np.some(y=>y.id===x.id));if(gone)st.lastServed={dir:gone.dir,count:gone.val};
+      st.pendPed=np;st.pendEmg=ne;
+      ne.forEach(x=>{if(!emgSeen.has(x.id)){emgSeen.add(x.id);emgQ.push({J:p[1],dir:x.dir,type:x.val,id:x.id});}});}break;
+  case 'ack':{const ok=p[3]==='OK',what={PED:'pedestrian request',EMERG:'emergency request',REQUEST:'request'}[p[1]]||p[1];
+      addLog('ack',`${p[2]} · ${what} ${ok?'acknowledged: '+p.slice(4).join(' · '):'REJECTED: '+p.slice(4).join(' · ')}`,ts,!ok);break;}
+  case 'ped':if(!e.r)counts.ped++;addLog('req',`${p[1]} · pedestrian request · ${p[3]} waiting · crossing ${p[2]}`,ts);break;
+  case 'emerg':if(!e.r)counts.emerg++;addLog('req',`${p[1]} · ${p[3]} arriving from ${p[2]}`,ts);break;
+  case 'log':addLog('raw',d,ts);break;
+  }
+  dirty=true;
+}
+
+/* ---------- signal phase model (mirrors JunctionClient: yellow 1 s -> all-red 1 s -> green/walk for `duration`) ---------- */
+function phaseOf(id,t){
+  const st=state[id];if(!st.online)return{mode:'OFFLINE'};const c=st.command;if(!c)return{mode:'IDLE'};
+  const el=Math.max(0,(t-c.ts)/1000),dur=c.duration,prev=st.prev,base={cmd:c,total:dur,el,ped:c.phase==='PEDESTRIAN',emg:c.mode==='EMERGENCY'};
+  if(el<1){if(prev&&prev.phase==='VEHICLE'&&prev.ts<c.ts)return Object.assign({mode:'YELLOW',dir:prev.direction,next:c.direction,left:1-el},base);return Object.assign({mode:'ALLRED',dir:null,next:c.direction,left:2-el},base);}
+  if(el<2)return Object.assign({mode:'ALLRED',dir:null,next:c.direction,left:2-el},base);
+  if(el<2+dur+0.6)return Object.assign({mode:c.phase==='PEDESTRIAN'?'WALK':'GREEN',dir:c.direction,left:Math.max(0,2+dur-el)},base);
+  return{mode:'IDLE',cmd:c};
+}
+function sigOf(ph,dir,online){if(!online)return'X';if(ph.mode==='GREEN'&&ph.dir===dir)return'G';if(ph.mode==='YELLOW'&&ph.dir===dir)return'Y';return'R';}
+
+/* ---------- vehicle simulation (visual; driven by the reported counts) ---------- */
+let simT=0,vid=0;const vehicles=[],box={};J.forEach(id=>box[id]=[]);const phases={};
+const COLORS=['#60a5fa','#34d399','#fbbf24','#f472b6','#a78bfa','#f87171','#e2e8f0','#fb923c','#2dd4bf','#93c5fd'];
+function pickRoute(key){const m=mixes[key]||{L:1,S:3,R:1};const L=m.L+.05,S=m.S+.05,R=m.R+.05;const r=Math.random()*(L+S+R);return r<L?'L':r<L+S?'S':'R';}
+function newVeh(l,s,o){const v={id:++vid,lane:l,s,v:o.v==null?60:o.v,vmax:o.emg?105:70+Math.random()*25,len:o.len||LEN,emg:!!o.emg,etype:o.etype,
+  color:COLORS[(vid*7)%COLORS.length],route:o.route,phase:'lane',lat:o.lat||0,tlat:o.emg?13:0,alpha:o.alpha==null?1:o.alpha,div:false,dwChecked:!!o.dwChecked,cs:0,conn:null};
+  l.vs.push(v);vehicles.push(v);return v;}
+function killVeh(v){const i=vehicles.indexOf(v);if(i>=0)vehicles.splice(i,1);if(v.lane){const j=v.lane.vs.indexOf(v);if(j>=0)v.lane.vs.splice(j,1);}
+  const b=v.lane&&box[v.lane.J];if(b){const k=b.indexOf(v);if(k>=0)b.splice(k,1);}if(v.el&&v.el.parentNode)v.el.parentNode.removeChild(v.el);}
+function gateOf(l){const ph=phases[l.J];return ph?sigOf(ph,l.dir,state[l.J].online):'X';}
+function exitRoom(l,v){const r=v.emg?'S':(v.route||(v.route=pickRoute(l.key)));const ex=exitLane(l.J,ROUTE[l.dir][r]);
+  for(const o of ex.vs){if(!o.div&&o.s<v.len+GAP+8)return false;}return true;}
+function canStop(v,lim){return v.v*v.v/(2*DEC)<=lim-v.s+0.5;}
+function move(v,limit,dt){const d=limit-v.s,va=d<=0?0:Math.sqrt(2*DEC*d);
+  v.v=Math.max(0,Math.min(v.v+ACC*dt,v.vmax,va));if(d<=0.15)v.v=0;v.s=Math.max(v.s,Math.min(v.s+v.v*dt,limit));}
+function divert(v){v.div=true;v.divT=simT;v.tlat=50;if(v.v<30)v.v=30;}
+function updateTarget(l){const st=state[l.J],a=st.online&&st.traffic&&st.traffic[l.dir];
+  if(!a){l.target=0;return;}const eff=Math.max(0,a.queue-(rel[l.key]||0));l.target=Math.min(eff,l.cap);
+  if(!l.seeded){l.seeded=true;for(let i=0;i<l.target;i++)newVeh(l,l.stopS-LEN/2-i*(LEN+GAP),{route:pickRoute(l.key),v:0,dwChecked:true});}}
+function laneFree(l,s0,link){for(const o of l.vs){if(o.div)continue;if(link?Math.abs(o.s-s0)<LEN+GAP+14:o.s<s0+LEN+GAP+4)return false;}return true;}
+function trySpawn(l){if(l.target<=0)return;const count=l.vs.reduce((n,o)=>n+(!o.div&&!o.emg?1:0),0);if(count>=l.target)return;
+  const link=l.kind==='link',s0=link?DW:0;if(!laneFree(l,s0,link))return;
+  newVeh(l,s0,{route:pickRoute(l.key),v:link?40:70,lat:link?50:0,alpha:link?0:1,dwChecked:true});l.lastSpawn=simT;l.gap=.7+Math.random()*.8;}
+function processEmg(){for(let i=emgQ.length-1;i>=0;i--){const q=emgQ[i],l=lanes[q.J+'-'+q.dir];if(!l||!state[q.J].online){emgQ.splice(i,1);continue;}
+  const link=l.kind==='link',s0=link?DW:0;if(!laneFree(l,s0,link))continue;
+  newVeh(l,s0,{emg:true,etype:q.type,len:q.type==='FIRE_TRUCK'?34:28,route:'S',v:60,lat:link?50:13,alpha:link?0:1,dwChecked:true});emgQ.splice(i,1);}}
+function enterBox(l,v){const route=v.emg?'S':(v.route||pickRoute(l.key));v.route=route;v.conn=conn(l,route);v.cs=Math.max(0,v.s-l.len);v.phase='conn';v.enterT=simT;v.skipBox=true;
+  const j=l.vs.indexOf(v);if(j>=0)l.vs.splice(j,1);box[l.J].push(v);if(!v.emg)rel[l.key]=(rel[l.key]||0)+1;}
+function stepLane(l,dt){const vs=l.vs;if(!vs.length)return;vs.sort((a,b)=>b.s-a.s);
+  const g=l.type==='app'?gateOf(l):'G';let lastCar=null,lastEmg=null;const out=[];
+  for(const v of vs.slice()){
+    if(v.div){v.s+=v.v*dt;continue;}
+    let limit=Infinity;const lead=v.emg?lastEmg:lastCar;if(lead)limit=lead.s-(lead.len+v.len)/2-GAP;
+    if(l.type==='app'){const stopLim=l.stopS-v.len/2;
+      if(v.s<=stopLim+1&&(g==='R'||g==='X'||(g==='Y'&&canStop(v,stopLim))))limit=Math.min(limit,stopLim);
+      if(!exitRoom(l,v))limit=Math.min(limit,l.len-1);}
+    move(v,limit,dt);if(v.emg)lastEmg=v;else lastCar=v;
+    if(l.type==='app'&&l.kind==='link'&&!v.dwChecked&&v.s>=DW){v.dwChecked=true;
+      if(v.emg&&v.emgDone)divert(v);
+      else if(!v.emg){const ahead=vs.reduce((n,o)=>n+(o!==v&&!o.div&&!o.emg&&o.s>v.s?1:0),0);if(ahead>=l.target)divert(v);}}
+    if(v.s>=l.len){if(l.type==='app')enterBox(l,v);else out.push(v);}
+  }
+  out.forEach(killVeh);}
+function stepBox(id,dt){const b=box[id];for(const v of b.slice()){if(v.skipBox){v.skipBox=false;continue;}   /* already moved this tick by stepLane */
+    const c=v.conn,tv=v.route==='S'?v.vmax:Math.min(v.vmax,50),p=connPos(c,v.cs);let blocked=false;
+    for(const o of b){if(o===v||o.enterT>=v.enterT)continue;const q=connPos(o.conn,o.cs),dx=q[0]-p[0],dy=q[1]-p[1];
+      if(Math.hypot(dx,dy)<(v.len+o.len)/2+4&&dx*Math.cos(p[2])+dy*Math.sin(p[2])>0){blocked=true;break;}}
+    if(blocked)v.v=Math.max(0,v.v-DEC*dt*1.5);else if(v.v>tv)v.v=Math.max(tv,v.v-DEC*dt);else v.v=Math.min(tv,v.v+ACC*dt);
+    /* do not run into the tail of the exit lane we are about to join */
+    let tailS=Infinity,tailLen=LEN;for(const o of c.exit.vs){if(!o.div&&o.s<tailS){tailS=o.s;tailLen=o.len;}}
+    const cl=tailS<Infinity?c.len+tailS-(tailLen+v.len)/2-GAP:Infinity,dl=cl-v.cs;
+    if(dl<=0)v.v=0;else v.v=Math.min(v.v,Math.sqrt(2*DEC*dl));
+    v.cs=Math.max(v.cs,Math.min(v.cs+v.v*dt,cl));
+    if(v.cs>=c.len){const ex=c.exit;b.splice(b.indexOf(v),1);v.lane=ex;v.s=v.cs-c.len;v.phase='lane';v.conn=null;ex.vs.push(v);
+      if(ex.type==='app'){if(!v.emg)v.route=pickRoute(ex.key);v.dwChecked=false;}if(v.emg)v.emgDone=true;}}}
+function step(dt){simT+=dt;const t=nowFn();J.forEach(id=>phases[id]=phaseOf(id,t));
+  appLanes.forEach(l=>{updateTarget(l);if(simT-l.lastSpawn>l.gap)trySpawn(l);});processEmg();
+  allLanes.forEach(l=>stepLane(l,dt));J.forEach(id=>stepBox(id,dt));
+  for(const v of vehicles.slice()){v.lat+=(v.tlat-v.lat)*Math.min(1,dt*4);
+    if(v.div){v.alpha=1-(simT-v.divT)/1.1;if(v.alpha<=0.02)killVeh(v);}else if(v.alpha<1)v.alpha=Math.min(1,v.alpha+dt*1.2);}}
+</script>
+<script>
+/* ======================= rendering ======================= */
+function el(tag,attrs,parent){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+const sigEls={},cwEls={},walkers={},pedIcons={},lblEls={},offEls={},jmodeEls={},wtags={};
+function buildMap(){const svg=$('map');svg.innerHTML='';
+  const g=id=>el('g',{id},svg);
+  el('rect',{width:W,height:HT,fill:'#08121f'},svg);
+  const roads=g('roads');el('rect',{x:0,y:CY-H,width:W,height:2*H,class:'road'},roads);
+  J.forEach(id=>el('rect',{x:XC[id]-H,y:0,width:2*H,height:HT,class:'road'},roads));
+  J.forEach(id=>el('rect',{x:XC[id]-H,y:CY-H,width:2*H,height:2*H,class:'box'},roads));
+  const mk=g('marks');
+  const xs=[0];J.forEach(id=>xs.push(XC[id]-H,XC[id]+H));xs.push(W);
+  for(let i=0;i<xs.length;i+=2){const a=xs[i],b=xs[i+1];
+    [CY-H,CY+H].forEach(y=>el('line',{x1:a,y1:y,x2:b,y2:y,class:'kerb'},mk));
+    const a2=i===0?a:a+STOP_D,b2=i===xs.length-2?b:b-STOP_D;
+    [CY-2,CY+2].forEach(y=>el('line',{x1:a2,y1:y,x2:b2,y2:y,class:'cl'},mk));}
+  J.forEach(id=>{const x=XC[id];[x-H,x+H].forEach(xx=>{el('line',{x1:xx,y1:0,x2:xx,y2:CY-H,class:'kerb'},mk);el('line',{x1:xx,y1:CY+H,x2:xx,y2:HT,class:'kerb'},mk);});
+    [x-2,x+2].forEach(xx=>{el('line',{x1:xx,y1:0,x2:xx,y2:CY-H-STOP_D,class:'cl'},mk);el('line',{x1:xx,y1:CY+H+STOP_D,x2:xx,y2:HT,class:'cl'},mk);});});
+  /* roadside driveways: where cars join / leave the link roads */
+  appLanes.filter(l=>l.kind==='link').forEach(l=>{const p=[l.a[0]+l.d[0]*DW,l.a[1]+l.d[1]*DW],n=[l.d[1],-l.d[0]];
+    el('rect',{x:p[0]-18,y:p[1]+n[1]*(H+7)-6,width:36,height:12,fill:'#16202d',stroke:'#2a3a4f','stroke-width':1,rx:3},mk);});
+  /* stop lines + direction arrows (one lane per direction) */
+  appLanes.forEach(l=>{const ang=Math.atan2(l.d[1],l.d[0])*180/Math.PI,sp=[l.a[0]+l.d[0]*l.stopS,l.a[1]+l.d[1]*l.stopS];
+    el('rect',{x:-1.5,y:-19,width:3,height:38,class:'stop',transform:`translate(${sp[0]} ${sp[1]}) rotate(${ang})`},mk);
+    [l.stopS-70,l.stopS-190].filter(s=>s>40).forEach(s=>el('path',{d:'M-9,-4 L2,-4 L2,-8 L11,0 L2,8 L2,4 L-9,4 Z',class:'arrow',transform:`translate(${l.a[0]+l.d[0]*s} ${l.a[1]+l.d[1]*s}) rotate(${ang})`},mk));});
+  /* zebra crossings: full road width on all four arms */
+  J.forEach(id=>{const x=XC[id];DIRS.forEach(dir=>{const cg=el('g',{},mk);let gx,gy,gw,gh;
+    if(dir==='NORTH'||dir==='SOUTH'){gx=x-H;gw=2*H;gh=CROSS;gy=dir==='NORTH'?CY-H-CROSS:CY+H;}else{gy=CY-H;gh=2*H;gw=CROSS;gx=dir==='WEST'?x-H-CROSS:x+H;}
+    cwEls[id+dir]=el('rect',{x:gx,y:gy,width:gw,height:gh,class:'cwglow'},cg);
+    for(let i=0;i<7;i++){if(dir==='NORTH'||dir==='SOUTH')el('rect',{x:gx+3+12*i,y:gy+2,width:6,height:gh-4,class:'zb',rx:1},cg);else el('rect',{x:gx+2,y:gy+3+12*i,width:gw-4,height:6,class:'zb',rx:1},cg);}
+    const ends=(dir==='NORTH'||dir==='SOUTH')?[[x-H-12,gy+gh/2],[x+H+12,gy+gh/2]]:[[gx+gw/2,CY-H-12],[gx+gw/2,CY+H+12]];
+    pedIcons[id+dir]=ends.map(p=>{const ig=el('g',{transform:`translate(${p[0]} ${p[1]}) scale(.9)`},mk);
+      el('circle',{cx:0,cy:-8,r:3,class:'pedicon'},ig);el('path',{d:'M0,-5 v8 M-4.5,-1 h9 M0,3 l-3.5,7 M0,3 l3.5,7',class:'pedicon'},ig);
+      const b=el('text',{x:0,y:-14,class:'badge'},ig);b.style.display='none';return{g:ig,badge:b};});
+    walkers[id+dir]=[];for(let i=0;i<6;i++){const c=el('circle',{r:3.4,class:'walker',cx:-99,cy:-99},mk);c.style.display='none';walkers[id+dir].push(c);}
+    const tp=(dir==='NORTH'||dir==='SOUTH')?[x,gy+(dir==='NORTH'?-6:gh+14)]:[gx+gw/2,dir==='WEST'?CY-H-40:CY+H+54];
+    wtags[id+dir]=el('text',{x:tp[0],y:tp[1],class:'wtag'},mk);});});
+  /* signal heads: exactly one per approach, on the driver's LEFT kerb beside the stop line */
+  const sg=g('signals');
+  J.forEach(id=>{const x=XC[id];
+    const pos={NORTH:[x+H+14,CY-H-54,'M-5,0 L0,-6 L5,0',[x+H,CY-H-54]],EAST:[x+H+52,CY+H+26,'M0,-5 L6,0 L0,5',[x+H+52,CY+H]],SOUTH:[x-H-14,CY+H+54,'M-5,0 L0,6 L5,0',[x-H,CY+H+54]],WEST:[x-H-52,CY-H-26,'M0,-5 L-6,0 L0,5',[x-H-52,CY-H]]};
+    const face={NORTH:[0,-27],EAST:[14,0],SOUTH:[0,27],WEST:[-14,0]};   /* chevron on the side facing oncoming traffic */
+    DIRS.forEach(dir=>{const p=pos[dir],gg=el('g',{transform:`translate(${p[0]} ${p[1]})`},sg);
+      el('line',{x1:p[3][0]-p[0],y1:p[3][1]-p[1],x2:0,y2:0,class:'pole'},gg);
+      el('rect',{x:-9,y:-21,width:18,height:42,rx:6,class:'house'},gg);
+      const r=el('circle',{cx:0,cy:-12.5,r:5.3,class:'lamp r'},gg),y=el('circle',{cx:0,cy:0,r:5.3,class:'lamp y'},gg),gr=el('circle',{cx:0,cy:12.5,r:5.3,class:'lamp g'},gg);
+      el('path',{d:p[2],transform:`translate(${face[dir][0]} ${face[dir][1]})`,fill:'none',stroke:'#7b8ca3','stroke-width':2},gg);
+      const horiz=dir==='EAST'||dir==='WEST',t=el('text',{x:horiz?0:(dir==='NORTH'?18:-18),y:horiz?-27:4,class:'stag'},gg);t.textContent=dir[0];
+      sigEls[id+dir]={r,y,g:gr,last:''};});});
+  J.forEach(id=>{const x=XC[id];const t=el('text',{x,y:CY+2,class:'jname'},svg);t.textContent=id;
+    el('rect',{x:x-H+3,y:CY-H+3,width:2*H-6,height:2*H-6,class:'jbox'},svg);
+    jmodeEls[id]=el('text',{x,y:CY+22,class:'jmode'},svg);
+    const og=el('g',{},svg);og.style.display='none';el('rect',{x:x-H,y:CY-H,width:2*H,height:2*H,class:'off'},og);const ot=el('text',{x,y:CY-2,class:'offt'},og);ot.textContent='OFFLINE';offEls[id]=og;
+    const lp={NORTH:[x+LN,18,'middle'],SOUTH:[x-LN,HT-10,'middle'],WEST:[id==='J01'?8:x-H-40,CY-H-64,id==='J01'?'start':'end'],EAST:[id==='J03'?W-8:x+H+40,CY+H+72,id==='J03'?'end':'start']};
+    DIRS.forEach(dir=>{const q=lp[dir];lblEls[id+dir]=el('text',{x:q[0],y:q[1],class:'vlabel','text-anchor':q[2]},svg);});});
+  [['← WESTBOUND',12,CY+H-8,'start'],['EASTBOUND →',W-12,CY-H+16,'end']].forEach(r=>{const t=el('text',{x:r[1],y:r[2],class:'road-label','text-anchor':r[3]},svg);t.textContent=r[0];t.style.opacity=.55;});
+  el('g',{id:'vehLayer'},svg);
+}
+function vehEl(v){const g=el('g',{class:'veh'}),L=v.len,h=L/2;let body=v.color;
+  if(v.emg)body=v.etype==='FIRE_TRUCK'?'#d62828':'#ffffff';
+  el('rect',{x:-h,y:-6.8,width:L,height:13.6,rx:4,fill:body,stroke:'rgba(0,0,0,.35)','stroke-width':.8},g);
+  el('rect',{x:h-11,y:-5.2,width:5.5,height:10.4,rx:1.5,class:'win'},g);el('rect',{x:-h+4,y:-5,width:4.5,height:10,rx:1.5,class:'win'},g);
+  el('rect',{x:h-1.6,y:-5.8,width:1.8,height:3,class:'hl'},g);el('rect',{x:h-1.6,y:2.8,width:1.8,height:3,class:'hl'},g);
+  el('rect',{x:-h,y:-5.8,width:1.8,height:3,class:'brk'},g);el('rect',{x:-h,y:2.8,width:1.8,height:3,class:'brk'},g);
+  if(v.emg){el('rect',{x:-3,y:-6,width:3,height:12,class:'fl1'},g);el('rect',{x:0,y:-6,width:3,height:12,class:'fl2'},g);
+    if(v.etype==='AMBULANCE')el('path',{d:'M-9,-1.5 h3 v-3 h3 v3 h3 v3 h-3 v3 h-3 v-3 h-3 z',fill:'#e11d48',transform:'translate(7 0) scale(.8)'},g);
+    if(v.etype==='POLICE')el('rect',{x:h-12,y:-6.8,width:7,height:13.6,fill:'#1d4ed8',opacity:.8},g);}
+  $('map').querySelector('#vehLayer').appendChild(g);return g;}
+function renderVehicles(){for(const v of vehicles){let x,y,ang;
+    if(v.phase==='conn'){const q=connPos(v.conn,v.cs);x=q[0];y=q[1];ang=q[2];}else{const l=v.lane;x=l.a[0]+l.d[0]*v.s;y=l.a[1]+l.d[1]*v.s;ang=Math.atan2(l.d[1],l.d[0]);}
+    x+=Math.sin(ang)*v.lat;y+=-Math.cos(ang)*v.lat;
+    if(!v.el)v.el=vehEl(v);
+    v.el.setAttribute('transform',`translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(ang*180/Math.PI).toFixed(1)})`);
+    let a=Math.max(0,v.alpha);if(v.lane&&v.lane.type==='stub')a=Math.min(a,Math.max(0,(v.lane.len-v.s)/36));
+    v.el.style.opacity=a.toFixed(2);const stopped=v.v<3;if(stopped!==v.stopCls){v.stopCls=stopped;v.el.classList.toggle('stop',stopped);}}}
+function renderSignals(t){
+  J.forEach(id=>{const st=state[id],ph=phases[id]||phaseOf(id,t);
+    DIRS.forEach(dir=>{const s=sigOf(ph,dir,st.online),e=sigEls[id+dir];if(e.last===s)return;e.last=s;
+      e.r.classList.toggle('on',s==='R');e.y.classList.toggle('on',s==='Y');e.g.classList.toggle('on',s==='G');});
+    offEls[id].style.display=st.online?'none':'';
+    DIRS.forEach(dir=>{const pend=st.pendPed.filter(x=>x.dir===dir),n=pend.reduce((a,x)=>a+x.val,0),walking=ph.mode==='WALK'&&ph.dir===dir;
+      cwEls[id+dir].setAttribute('class','cwglow'+(walking?' walk':pend.length?' pend':''));
+      pedIcons[id+dir].forEach(ic=>{const c=pend.length||walking?'pedicon pend':'pedicon';ic.g.children[0].setAttribute('class',c);ic.g.children[1].setAttribute('class',c);ic.badge.style.display=pend.length&&!walking?'':'none';ic.badge.textContent=n;});
+      wtags[id+dir].textContent=walking?'WALK':'';});
+    const emgAct=ph.mode==='GREEN'&&ph.emg;
+    jmodeEls[id].textContent=!st.online?'':ph.mode==='GREEN'?(ph.emg?'EMERGENCY ':'')+ph.dir+' · '+ph.left.toFixed(0)+'s':ph.mode==='WALK'?'WALK '+ph.dir+' · '+ph.left.toFixed(0)+'s':ph.mode==='YELLOW'||ph.mode==='ALLRED'?'CHANGING':'ALL RED';
+    jmodeEls[id].style.fill=emgAct?'#f87171':ph.mode==='WALK'?'#34d399':'#8aa3c0';
+    DIRS.forEach(dir=>{const ws=walkers[id+dir],walking=ph.mode==='WALK'&&ph.dir===dir;
+      const cnt=walking?Math.min(6,Math.max(2,(st.lastServed&&st.lastServed.dir===dir?st.lastServed.count:4))):0;
+      ws.forEach((c,i)=>{if(i>=cnt){c.style.display='none';return;}c.style.display='';const u=((simT*.22+i/6)%1),f=i%2?u:1-u,x=XC[id];
+        if(dir==='NORTH'||dir==='SOUTH'){c.setAttribute('cx',x-H-6+f*(2*H+12));c.setAttribute('cy',(dir==='NORTH'?CY-H-CROSS:CY+H)+6+(i%3)*6);}
+        else{c.setAttribute('cy',CY-H-6+f*(2*H+12));c.setAttribute('cx',(dir==='WEST'?x-H-CROSS:x+H)+6+(i%3)*6);}});});
+    DIRS.forEach(dir=>{const l=lanes[id+'-'+dir],a=st.traffic&&st.traffic[dir],shown=l.vs.filter(v=>!v.div&&!v.emg).length;
+      const arrow={NORTH:'↓',EAST:'←',SOUTH:'↑',WEST:'→'}[dir];
+      lblEls[id+dir].textContent=`${dir} ${arrow}  Q ${a?a.queue:'–'}${a&&a.queue>shown?` (${shown} drawn)`:''}`;});});}
+</script>
+<script>
+/* ======================= panels ======================= */
+function cardsHtml(t){return J.map(id=>{const st=state[id],ph=phases[id]||phaseOf(id,t),tr=st.traffic;
+  const sel=ph.mode==='GREEN'||ph.mode==='YELLOW'?ph.dir:(ph.mode==='ALLRED'&&!ph.ped?ph.next:null);
+  const active=!st.online?'—':ph.mode==='GREEN'?`${ph.dir} GREEN`:ph.mode==='WALK'?`ALL RED · WALK ${ph.dir}`:ph.mode==='YELLOW'?`${ph.dir} YELLOW`:ph.mode==='ALLRED'?'ALL RED (clearance)':'ALL RED (idle)';
+  const rem=ph.mode==='GREEN'||ph.mode==='WALK'?ph.left.toFixed(1)+' s of '+ph.total+' s':ph.mode==='YELLOW'||ph.mode==='ALLRED'?'next phase in '+ph.left.toFixed(1)+' s ('+ph.total+' s long)':'—';
+  const pedT=!st.online?'—':st.pendPed.length?st.pendPed.map(x=>`${x.dir}×${x.val}`).join(', ')+' waiting'+(ph.mode==='WALK'?' · WALK active '+ph.dir:''):(ph.mode==='WALK'?'WALK active · '+ph.dir:'none');
+  const emgT=!st.online?'—':st.pendEmg.length?st.pendEmg.map(x=>`${x.val} from ${x.dir}`).join(', ')+' pending':(ph.mode==='GREEN'&&ph.emg?`<span style="color:var(--red)">${esc(ph.cmd.vehicle)} · green ${ph.dir}</span>`:'none');
+  const rows=DIRS.map(dir=>{const a=tr&&tr[dir],s=sigOf(ph,dir,st.online),sn={G:'GREEN',Y:'YELLOW',R:'RED',X:'—'}[s];
+    return `<tr class="${sel===dir?'sel':''}"><td>${dir}</td><td>${a?a.left:'–'}</td><td>${a?a.straight:'–'}</td><td>${a?a.right:'–'}</td><td>${a?a.vehicles:'–'}</td><td>${a?a.queue:'–'}</td><td>${a?a.wait+'s':'–'}</td><td>${a?demand(id,dir).toFixed(1):'–'}</td><td><span class="sg ${s}"></span>${sn}${s==='G'?' '+ph.left.toFixed(0)+'s':''}</td></tr>`;}).join('');
+  return `<section class="panel jc"><div class="ph"><h2>${id}<span class="pill ${st.online?'on':'offl'}">${st.online?'ONLINE':'OFFLINE'}</span></h2></div><div class="pb">
+   <div class="cstat"><div><span>Active signal</span><br><b>${active}</b></div><div><span>Remaining</span><br><b>${rem}</b></div>
+   <div><span>Pedestrian requests</span><br><b>${pedT}</b></div><div><span>Emergency requests</span><br><b>${emgT}</b></div></div>
+   <table><thead><tr><th>Approach</th><th>Left</th><th>Straight</th><th>Right</th><th>Total</th><th>Queue</th><th>Wait</th><th>Demand</th><th>Signal</th></tr></thead><tbody>${rows}</tbody></table>
+   <div class="note">Left/Straight/Right = vehicles reported in the last UDP snapshot. Demand = vehicles + 2·queue + wait/10 − downstream penalty, as the server computes it.</div></div></section>`;}).join('');}
+function decisionHtml(t){const id=decTab==='latest'?lastDecisionJ:decTab;const d=id&&state[id]&&state[id].decision;
+  if(!d)return '<div class="hint">No decision received'+(decTab==='latest'?' yet':' for '+decTab)+'.</div>';
+  const ph=phases[id]||phaseOf(id,t),sameCmd=ph.cmd&&ph.cmd.ts>=d.ts-2500;
+  const remain=!sameCmd?'—':ph.mode==='GREEN'||ph.mode==='WALK'?ph.left.toFixed(1)+' s of '+ph.total+' s':ph.mode==='YELLOW'?'yellow clearance, then '+ph.total+' s phase':ph.mode==='ALLRED'?'all-red clearance, then '+ph.total+' s phase':'phase finished';
+  const max=Math.max(1,...Object.values(d.table).map(x=>x.score)),nm={N:'NORTH',E:'EAST',S:'SOUTH',W:'WEST'};
+  const bars=d.mode==='NORMAL'?Object.keys(d.table).map(k=>{const x=d.table[k],sel=nm[k]===d.dir;return `<div class="bar ${sel?'sel':''}"><span>${nm[k]}</span><div class="t"><i style="width:${Math.max(2,x.score/max*100)}%"></i></div><b>${x.score.toFixed(1)}</b>${x.pen>0?`<span class="pen" style="grid-column:2/4">downstream penalty −${x.pen.toFixed(1)}</span>`:''}</div>`;}).join(''):'';
+  const pen=d.mode==='NORMAL'&&d.table[d.dir[0]]?d.table[d.dir[0]].pen:0;
+  return `<div><span class="mode ${d.mode}">${d.mode}</span></div><dl class="kv">
+   <dt>Junction</dt><dd>${id}</dd><dt>Selected approach</dt><dd>${d.mode==='PEDESTRIAN'?'Crossing '+d.dir+' (all vehicle signals red)':d.dir}</dd>
+   <dt>Demand score</dt><dd>${d.mode==='NORMAL'?d.score.toFixed(1):'n/a (request priority)'}</dd><dt>Green / phase duration</dt><dd>${d.green} s</dd>
+   <dt>Remaining phase time</dt><dd>${remain}</dd><dt>Anti-starvation</dt><dd>${d.mode==='NORMAL'?(d.anti?'<span class="pen">applied: next-best approach chosen</span>':'not needed'):'n/a'}</dd>
+   <dt>Downstream penalty</dt><dd>${d.mode==='NORMAL'?(pen>0?'<span class="pen">−'+pen.toFixed(1)+' on selected approach</span>':'none on selected approach'):'n/a'}</dd></dl>
+   <div class="reason"><b>Why:</b> ${esc(d.reason)}</div>${bars?'<h3>Adjusted demand per approach</h3><div class="bars">'+bars+'</div>':''}`;}
+function reqStatus(r,t){const st=state[r.junction],list=r.kind==='pedestrian'?st.pendPed:st.pendEmg;
+  if(list.some(x=>x.id===r.id))return'QUEUED';
+  if(!st.online)return'CANCELLED';
+  const c=st.command,ok=c&&c.ts>=r.ts-1000&&(r.kind==='pedestrian'?c.phase==='PEDESTRIAN':c.mode==='EMERGENCY');
+  if(!ok)return Date.now()-r.ts>125000?'EXPIRED':'QUEUED';
+  const el=(t-c.ts)/1000;return el<2?'SERVED':el<2+c.duration?'ACTIVE':'COMPLETED';}
+function reqListHtml(t){if(!myReqs.length)return '<div class="hint">No requests sent from this dashboard yet.</div>';
+  return myReqs.slice(0,8).map(r=>{const s=reqStatus(r,t);
+    return `<div class="req"><span><b>${r.junction}</b> · ${r.kind==='pedestrian'?'Pedestrians '+esc(r.detail):esc(r.detail)} · ${esc(r.dir)}</span><span class="st ${s}">${s}</span></div>`;}).join('');}
+function logsHtml(){const ok={net:['udp','tcp','sys','req','ack'],req:['req','ack'],raw:['raw']}[activeView];
+  return logs.filter(x=>ok.includes(x.kind)).slice(0,80).map(x=>`<div class="ll"><span class="lt">${timeText(x.ts)}</span><span class="lk ${x.err?'err':x.kind}">${x.err?'ERROR':x.kind.toUpperCase()}</span><span class="lx ${x.err?'err':''}">${esc(x.text)}</span></div>`).join('')||'<div class="hint">No events yet.</div>';}
+function renderPanels(){const t=nowFn();
+  const on=J.filter(id=>state[id].online).length;$('cOnline').textContent=on+'/3';$('mapConn').textContent=on+' of 3 junctions connected';
+  $('cUdp').textContent=counts.udp;$('cTcp').textContent=counts.tcp;$('cPed').textContent=counts.ped;$('cEmg').textContent=counts.emerg;
+  $('cards').innerHTML=cardsHtml(t);$('decision').innerHTML=decisionHtml(t);$('reqList').innerHTML=reqListHtml(t);
+  if(dirty){const lg=$('logList'),top=lg.scrollTop;lg.innerHTML=logsHtml();lg.scrollTop=top;dirty=false;}}
+
+/* ======================= request forms: real HTTP POST to the Java server ======================= */
+async function submitReq(kind){const ped=kind==='pedestrian',msg=$(ped?'pedMsg':'emgMsg'),btn=$(ped?'pedBtn':'emgBtn');
+  const body=ped?{junction:$('pedJ').value,direction:$('pedD').value,count:Number($('pedC').value)}:{junction:$('emgJ').value,direction:$('emgD').value,vehicle:$('emgV').value};
+  msg.className='fmsg';
+  if(ped&&(!Number.isInteger(body.count)||body.count<1||body.count>10000)){msg.className='fmsg err';msg.textContent='Enter a whole number of waiting pedestrians between 1 and 10000.';return;}
+  btn.disabled=true;msg.textContent='Sending to the server…';
+  try{const r=await fetch('api/'+kind,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    let j=null;try{j=await r.json();}catch(_){}
+    if(r.ok&&j&&j.ok){msg.className='fmsg ok';msg.textContent='✔ '+j.message;
+      myReqs.unshift({id:j.id,kind,junction:body.junction,dir:body.direction,detail:ped?'×'+body.count:body.vehicle,ts:Date.now()});}
+    else{msg.className='fmsg err';msg.textContent='✖ '+((j&&j.message)||('Server returned HTTP '+r.status));}
+  }catch(err){msg.className='fmsg err';msg.textContent='✖ Could not reach the dashboard server: '+err.message;}
+  finally{btn.disabled=false;dirty=true;}}
+$('pedForm').addEventListener('submit',e=>{e.preventDefault();submitReq('pedestrian');});
+$('emgForm').addEventListener('submit',e=>{e.preventDefault();submitReq('emergency');});
+$('logTabs').addEventListener('click',e=>{const b=e.target.closest('.tab');if(!b)return;document.querySelectorAll('#logTabs .tab').forEach(x=>x.classList.toggle('active',x===b));activeView=b.dataset.v;dirty=true;});
+(function(){const d=$('decTabs');['latest','J01','J02','J03'].forEach(k=>{const b=document.createElement('span');b.className='tab'+(k==='latest'?' active':'');b.textContent=k==='latest'?'Latest':k;b.onclick=()=>{decTab=k;d.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===b));};d.appendChild(b);});})();
+
+/* ======================= boot ======================= */
+buildMap();
+let lastT=0,lastPanel=0;
+function frame(ts){const dt=Math.min(.05,(ts-lastT)/1000||0);lastT=ts;step(dt);renderVehicles();renderSignals(nowFn());
+  if(ts-lastPanel>300){lastPanel=ts;renderPanels();}requestAnimationFrame(frame);}
+window.__sg={state,lanes,stubs,vehicles,box,mixes,rel,emgQ,handleEvent,step,phaseOf,sigOf,conn,connPos,ROUTE,XC,CY,H,LN,STOP_D,LEN,GAP,
+  setNow:f=>{nowFn=f;},phases,counts,getSimT:()=>simT,reqStatus,myReqs,demand,decisionHtml,cardsHtml,reqListHtml,logsHtml,getLogs:()=>logs,renderVehicles,renderSignals,renderPanels};
+if(!window.__SG_TEST){
+  requestAnimationFrame(frame);
+  const feed=new EventSource('events');
+  feed.onopen=()=>{$('liveDot').className='dot ok';$('liveTxt').textContent='Live event feed connected';};
+  feed.onmessage=m=>{try{handleEvent(JSON.parse(m.data));}catch(err){addLog('raw','Could not parse event: '+err.message);}};
+  feed.onerror=()=>{$('liveDot').className='dot';$('liveTxt').textContent='Event feed unavailable · retrying';};
+}
+</script>
+</body>
+</html>

@@ -86,9 +86,12 @@ public class JunctionHandler extends Thread {
                         if (store.addPedestrianRequest(request)) {
                             send("ACK|PED_REQUEST|QUEUED");
                             DashboardHub.publish("ped", line);
+                            DashboardHub.publish("ack", "ACK|PED|" + junctionId + "|OK|QUEUED|via junction console");
+                            DashboardHub.publishRequestState(store, junctionId);
                             System.out.println("[REQUEST] Pedestrian request queued for " + junctionId);
                         } else {
                             send("ERROR|Pedestrian request queue is full");
+                            DashboardHub.publish("ack", "ACK|PED|" + junctionId + "|ERROR|Pedestrian request queue is full");
                         }
                     } else if (line.startsWith("EMERGENCY_REQUEST|")) {
                         EmergencyRequest request = EmergencyRequest.fromPacketString(line);
@@ -98,15 +101,20 @@ public class JunctionHandler extends Thread {
                         if (store.addEmergencyRequest(request)) {
                             send("ACK|EMERGENCY_REQUEST|QUEUED");
                             DashboardHub.publish("emerg", line);
+                            DashboardHub.publish("ack", "ACK|EMERG|" + junctionId + "|OK|QUEUED|via junction console");
+                            DashboardHub.publishRequestState(store, junctionId);
                             System.out.println("[REQUEST] Emergency request queued for " + junctionId);
                         } else {
                             send("ERROR|Emergency request queue is full");
+                            DashboardHub.publish("ack", "ACK|EMERG|" + junctionId + "|ERROR|Emergency request queue is full");
                         }
                     } else {
                         send("ERROR|Unknown message");
                     }
                 } catch (IllegalArgumentException ex) {
                     send("ERROR|" + ex.getMessage());
+                    DashboardHub.publish("ack", "ACK|REQUEST|" + junctionId + "|ERROR|"
+                            + String.valueOf(ex.getMessage()).replace('|', '/'));
                     System.out.println("[TCP] Invalid message from " + junctionId + ": " + ex.getMessage());
                 }
             }
@@ -130,6 +138,7 @@ public class JunctionHandler extends Thread {
                     }
                 }
                 DashboardHub.publish("leave", junctionId);
+                DashboardHub.publishRequestState(store, junctionId);
                 System.out.println("[TCP] " + junctionId + " disconnected");
             }
             if (writerThread != null) writerThread.interrupt();

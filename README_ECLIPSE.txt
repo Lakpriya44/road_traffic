@@ -221,11 +221,11 @@ and stop instead of waiting indefinitely for another keyboard command.
 
 LIVE DASHBOARD (for the evaluation panel)
 =========================================
-When TrafficCenter starts it also serves a live web dashboard on port 8080.
+When TrafficCenter starts it also serves a live web dashboard on port 8082.
 Open it in any browser:
 
-  Laptop 1:         http://localhost:8080
-  Another laptop:   http://SERVER_LAN_IP:8080   (allow TCP 8080 in the firewall)
+  Laptop 1:         http://localhost:8082
+  Another laptop:   http://SERVER_LAN_IP:8082   (allow TCP 8082 in the firewall)
 
 It shows each junction's signal lights, queues, demand scores, the active
 phase with a countdown, emergency / pedestrian phases, counters, and a live
@@ -238,4 +238,4 @@ Notes:
 - Run the server from the project folder (Eclipse does this by default) because
   the page is read from web/dashboard.html.
 - The dashboard needs no internet; it uses no external libraries or fonts.
-- If port 8080 is busy, the server prints a warning and keeps running without it.
+- If port 8082 is busy, the server prints a warning and keeps running without it.
